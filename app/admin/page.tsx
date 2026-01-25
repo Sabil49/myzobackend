@@ -13,7 +13,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'notifications'>('products');
 
   // useEffect(() => {
