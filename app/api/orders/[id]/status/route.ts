@@ -9,9 +9,11 @@ import { ZodError } from 'zod';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,7 +28,7 @@ export async function PUT(
     const validatedData = updateOrderStatusSchema.parse(body);
 
     const order = await prisma.order.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: validatedData.status,
         trackingNumber: validatedData.trackingNumber,
