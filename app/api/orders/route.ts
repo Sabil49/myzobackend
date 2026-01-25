@@ -88,18 +88,17 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals with transaction for atomicity
     const order = await prisma.$transaction(async (tx) => {
-  // Verify address ownership within transaction
-  const address = await tx.address.findUnique({
-    where: { id: validatedData.addressId },
-    select: { userId: true },
-  });
+      // Verify address ownership within transaction
+      const address = await tx.address.findUnique({
+        where: { id: validatedData.addressId },
+        select: { userId: true },
+      });
 
-  if (!address || address.userId !== payload.userId) {
-    throw new Error('Address not found or access denied');
-  }
+      if (!address || address.userId !== payload.userId) {
+        throw new Error('Address not found or access denied');
+      }
+
       // Atomically update product stock and validate availability
-      // Atomically update product stock and validate availability
-      // For each item, decrement stock only if sufficient stock exists
       const itemsWithPrices = [];
 
       for (const item of validatedData.items) {
@@ -131,6 +130,7 @@ export async function POST(request: NextRequest) {
           price: product.price,
         });
       }
+
       const subtotal = itemsWithPrices.reduce(
         (sum, item) => sum + Number(item.price) * item.quantity,
         0
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
           shippingCost,
           tax,
           total,
-          paymentMethod: validatedData.paymentMethod,
+          paymentMethod: validatedData.paymentMethod.toUpperCase(),
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
