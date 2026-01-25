@@ -55,7 +55,7 @@ export async function PUT(
       DELIVERED: 'Your order has been delivered',
     };
 
-    if (statusMessages[validatedData.status]) {
+    if (statusMessages[validatedData.status] && order.userId) {
       await sendPushToUser(order.userId, {
         title: 'Order Update',
         body: statusMessages[validatedData.status],
