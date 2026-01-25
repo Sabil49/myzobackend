@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
+import { OrderStatus } from '@prisma/client';
 // Removed invalid import of OrderWhereInput
 // GET /api/admin/orders - Get all orders
 export async function GET(request: NextRequest) {
@@ -36,8 +37,10 @@ export async function GET(request: NextRequest) {
 
     
 
-    const where: { status?: string } = {};
-    if (status) where.status = status;
+    const where: { status?: OrderStatus } = {};
+    if (status && Object.values(OrderStatus).includes(status as OrderStatus)) {
+      where.status = status as OrderStatus;
+    }
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({

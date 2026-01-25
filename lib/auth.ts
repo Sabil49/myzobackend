@@ -41,8 +41,8 @@ const validatePayload = (payload: unknown): JWTPayload => {
     payload !== null &&
     'userId' in payload &&
     'role' in payload &&
-    typeof (payload as any).userId === 'string' &&
-    typeof (payload as any).role === 'string'
+    typeof (payload as Record<string, unknown>).userId === 'string' &&
+    typeof (payload as Record<string, unknown>).role === 'string'
   ) {
     return payload as JWTPayload;
   }

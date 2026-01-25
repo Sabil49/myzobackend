@@ -79,7 +79,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(product, { status: 201 });
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'ZodError') {
-      return NextResponse.json({ error: (error as any).errors }, { status: 400 });
+      // Import ZodError from zod at the top if not already imported
+      // import { ZodError } from 'zod';
+      const zodError = error as import('zod').ZodError;
+      return NextResponse.json({ error: zodError.errors }, { status: 400 });
     }
     console.error('Product creation error:', error);
     return NextResponse.json(

@@ -20,19 +20,6 @@ export function NotificationsSender() {
     setMessage(null);
 
     try {
-      const token = localStorage.getItem('adminToken');
-      
-      let dataObj = {};
-      if (formData.data) {
-        try {
-          dataObj = JSON.parse(formData.data);
-        } catch (e) {
-          alert('Invalid JSON in custom data field');
-          setSending(false);
-          return;
-        }
-      }
-
       // Validate required fields
       if (!formData.title.trim() || !formData.body.trim()) {
         setMessage({
@@ -64,7 +51,7 @@ export function NotificationsSender() {
       if (formData.data) {
         try {
           dataObj = JSON.parse(formData.data);
-        } catch (err) {
+        } catch {
           setMessage({
             type: 'error',
             text: 'Invalid JSON in custom data',

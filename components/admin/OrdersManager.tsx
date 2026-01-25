@@ -43,7 +43,7 @@ export function OrdersManager() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
 
-  const fetchOrders = async () => {
+  const fetchOrders = React.useCallback(async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
@@ -76,11 +76,11 @@ export function OrdersManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchOrders();
-  }, [statusFilter]);
+  }, [fetchOrders]);
 
   if (loading) {
     return <div className="p-8 text-center">Loading orders...</div>;
