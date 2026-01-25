@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
           shippingCost,
           tax,
           total,
-          paymentMethod: validatedData.paymentMethod.toUpperCase(),
+          paymentMethod: validatedData.paymentMethod,
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
