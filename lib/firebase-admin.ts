@@ -78,7 +78,7 @@ export async function sendOrderConfirmationPush(orderId: string) {
     include: { user: true },
   });
 
-  if (!order) return;
+  if (!order || !order.userId) return;
 
   await sendPushToUser(order.userId, {
     title: 'Order Confirmed',
