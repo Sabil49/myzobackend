@@ -7,11 +7,13 @@ import { ZodError } from 'zod';
 // GET /api/products/[id]
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     const product = await prisma.product.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         category: true,
       },
@@ -37,9 +39,11 @@ export async function GET(
 // PUT /api/products/[id] - Update product (admin only)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,7 +67,7 @@ export async function PUT(
     const validatedData = updateProductSchema.parse(body);
 
     const product = await prisma.product.update({
-      where: { id: params.id },
+      where: { id },
       data: validatedData,
       include: { category: true },
     });
@@ -92,9 +96,11 @@ export async function PUT(
 // DELETE /api/products/[id] - Delete product (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -115,7 +121,7 @@ export async function DELETE(
     }
 
     await prisma.product.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ message: 'Product deleted successfully' });
