@@ -7,60 +7,61 @@ import { useRouter } from 'next/navigation';
 import { ProductsManager } from '@/components/admin/ProductsManager';
 import { OrdersManager } from '@/components/admin/OrdersManager';
 import { NotificationsSender } from '@/components/admin/NotificationsSender';
+import { tr } from 'zod/v4/locales';
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'notifications'>('products');
 
-  useEffect(() => {
-    const verifyAdmin = async () => {
-      try {
-        const token = localStorage.getItem('adminToken');
-        if (!token) {
-          router.push('/login');
-          return;
-        }
+  // useEffect(() => {
+  //   const verifyAdmin = async () => {
+  //     try {
+  //       const token = localStorage.getItem('adminToken');
+  //       if (!token) {
+  //         router.push('/login');
+  //         return;
+  //       }
 
-        // Verify token is valid by making a protected request
-        const response = await fetch('/api/admin/products?page=1&limit=1', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
+  //       // Verify token is valid by making a protected request
+  //       const response = await fetch('/api/admin/products?page=1&limit=1', {
+  //         headers: {
+  //           'Authorization': `Bearer ${token}`,
+  //         },
+  //       });
 
-        if (response.status === 401) {
-          localStorage.removeItem('adminToken');
-          router.push('/login');
-          return;
-        }
+  //       if (response.status === 401) {
+  //         localStorage.removeItem('adminToken');
+  //         router.push('/login');
+  //         return;
+  //       }
 
-        if (response.status === 403) {
-          setIsAuthenticated(true);
-          setIsAuthorized(false);
-          setIsLoading(false);
-          return;
-        }
+  //       if (response.status === 403) {
+  //         setIsAuthenticated(true);
+  //         setIsAuthorized(false);
+  //         setIsLoading(false);
+  //         return;
+  //       }
 
-        if (response.ok) {
-          setIsAuthenticated(true);
-          setIsAuthorized(true);
-          setIsLoading(false);
-          return;
-        }
+  //       if (response.ok) {
+  //         setIsAuthenticated(true);
+  //         setIsAuthorized(true);
+  //         setIsLoading(false);
+  //         return;
+  //       }
 
-        // Other errors
-        router.push('/login');
-      } catch (error) {
-        console.error('Auth verification failed:', error);
-        router.push('/login');
-      }
-    };
+  //       // Other errors
+  //       router.push('/login');
+  //     } catch (error) {
+  //       console.error('Auth verification failed:', error);
+  //       router.push('/login');
+  //     }
+  //   };
 
-    verifyAdmin();
-  }, [router]);
+  //   verifyAdmin();
+  // }, [router]);
 
   if (isLoading) {
     return <div className="p-8 text-center">Verifying access...</div>;
