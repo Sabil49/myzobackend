@@ -143,6 +143,12 @@ export async function POST(request: NextRequest) {
       // Generate order number with crypto-strong UUID
       const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
+      // Map payment method to uppercase for Prisma enum
+      const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY'> = {
+        'stripe': 'STRIPE',
+        'razorpay': 'RAZORPAY',
+      };
+
       // Create order
       return tx.order.create({
         data: {
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest) {
           shippingCost,
           tax,
           total,
-          paymentMethod: validatedData.paymentMethod,
+          paymentMethod: paymentMethodMap[validatedData.paymentMethod],
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
