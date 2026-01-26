@@ -8,7 +8,9 @@ export const createProductSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   price: z.number().positive('Price must be positive'),
   stock: z.number().int().min(0, 'Stock cannot be negative').default(0),
-  categoryId: z.string().cuid().optional().nullable(),
+  categoryId: z.string().cuid().optional()
+    .or(z.literal('').transform(() => undefined))
+    .or(z.null().transform(() => undefined)),
   materials: z.array(z.string()).min(1, 'At least one material is required'),
   dimensions: z.string().min(1, 'Dimensions are required'),
   careInstructions: z.string().min(1, 'Care instructions are required'),
@@ -17,7 +19,14 @@ export const createProductSchema = z.object({
   isFeatured: z.boolean().default(false),
 });
 
-export const updateProductSchema = createProductSchema.partial();
+export const updateProductSchema = createProductSchema.partial().transform((data) => {
+  // Remove categoryId if it's null or empty string
+  if (data.categoryId === null || data.categoryId === '') {
+    const { categoryId, ...rest } = data;
+    return rest;
+  }
+  return data;
+});
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

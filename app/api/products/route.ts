@@ -72,8 +72,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createProductSchema.parse(body);
 
+    // Clean the data - remove undefined categoryId
+    const { categoryId, ...rest } = validatedData;
+    const cleanData = categoryId 
+      ? { ...rest, categoryId }
+      : rest;
+
     const product = await prisma.product.create({
-      data: validatedData,
+      data: cleanData as Prisma.ProductUncheckedCreateInput,
       include: { category: true },
     });
 
