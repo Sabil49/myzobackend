@@ -10,10 +10,10 @@ import { ZodError } from 'zod';
 // GET /api/products/:id - Get single product
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const product = await prisma.product.findUnique({
       where: { id },
@@ -40,7 +40,7 @@ export async function GET(
 // PUT /api/products/:id - Update product (admin only)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -53,19 +53,19 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const validatedData = updateProductSchema.parse(body);
 
     // Clean the data - remove undefined/null categoryId
-    const cleanData: Prisma.ProductUncheckedUpdateInput = { ...validatedData };
-    if (!cleanData.categoryId) {
-      delete cleanData.categoryId;
-    }
+    const { categoryId, ...rest } = validatedData;
+    const cleanData = categoryId 
+      ? { ...rest, categoryId }
+      : rest;
 
     const product = await prisma.product.update({
       where: { id },
-      data: cleanData,
+      data: cleanData as Prisma.ProductUncheckedUpdateInput,
       include: { category: true },
     });
 
@@ -119,7 +119,7 @@ export async function PUT(
 // DELETE /api/products/:id - Delete product (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -132,7 +132,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     await prisma.product.delete({
       where: { id },
