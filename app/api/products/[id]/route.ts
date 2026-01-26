@@ -58,10 +58,10 @@ export async function PUT(
     const validatedData = updateProductSchema.parse(body);
 
     // Clean the data - remove undefined/null categoryId
-    const { categoryId, ...rest } = validatedData;
-    const cleanData = categoryId 
-      ? { ...rest, categoryId }
-      : rest;
+    const cleanData = { ...validatedData };
+    if ('categoryId' in cleanData && !cleanData.categoryId) {
+      delete cleanData.categoryId;
+    }
 
     const product = await prisma.product.update({
       where: { id },
