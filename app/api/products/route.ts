@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
 import { createProductSchema } from '@/lib/validators/product';
 import { Prisma } from '@prisma/client';
+import { ZodError } from 'zod';
 
 // GET /api/products - List products with filters
 export async function GET(request: NextRequest) {
@@ -78,12 +79,38 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(product, { status: 201 });
   } catch (error: unknown) {
-    if (error instanceof Error && error.name === 'ZodError') {
-      // Import ZodError from zod at the top if not already imported
-      // import { ZodError } from 'zod';
-      const zodError = error as import('zod').ZodError;
-      return NextResponse.json({ error: zodError.errors }, { status: 400 });
+    // Handle Zod validation errors
+    if (error instanceof ZodError) {
+      // Convert Zod errors array to a readable string message
+      const errorMessage = error.errors
+        .map((err) => `${err.path.join('.')}: ${err.message}`)
+        .join(', ');
+      
+      return NextResponse.json(
+        { 
+          error: errorMessage,
+          details: error.errors // Keep detailed errors for debugging
+        },
+        { status: 400 }
+      );
     }
+
+    // Handle Prisma errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'A product with this style code already exists' },
+          { status: 409 }
+        );
+      }
+      if (error.code === 'P2003') {
+        return NextResponse.json(
+          { error: 'Invalid category ID' },
+          { status: 400 }
+        );
+      }
+    }
+
     console.error('Product creation error:', error);
     return NextResponse.json(
       { error: 'Failed to create product' },
