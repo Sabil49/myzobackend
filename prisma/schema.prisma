@@ -82,8 +82,8 @@ model Product {
   description   String
   price         Decimal   @db.Decimal(10, 2)
   
-  categoryId    String
-  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryId    String?
+  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   
   images        String[]  // Array of URLs
   materials     String[]

@@ -72,22 +72,35 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = createProductSchema.parse(body);
 
-    // Clean the data - remove undefined categoryId
-    const { categoryId, ...rest } = validatedData;
-    const cleanData = categoryId 
-      ? { ...rest, categoryId }
-      : rest;
+    // Build the data object - handle categoryId properly
+    const productData: Prisma.ProductCreateInput = {
+      name: validatedData.name,
+      styleCode: validatedData.styleCode,
+      description: validatedData.description,
+      price: validatedData.price,
+      stock: validatedData.stock,
+      materials: validatedData.materials,
+      dimensions: validatedData.dimensions,
+      careInstructions: validatedData.careInstructions,
+      images: validatedData.images,
+      isActive: validatedData.isActive,
+      isFeatured: validatedData.isFeatured,
+      // Only connect category if categoryId is provided
+      ...(validatedData.categoryId && {
+        category: {
+          connect: { id: validatedData.categoryId }
+        }
+      }),
+    };
 
     const product = await prisma.product.create({
-      data: cleanData as Prisma.ProductUncheckedCreateInput,
+      data: productData,
       include: { category: true },
     });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error: unknown) {
-    // Handle Zod validation errors
     if (error instanceof ZodError) {
-      // Convert Zod errors array to a readable string message
       const errorMessage = error.errors
         .map((err) => `${err.path.join('.')}: ${err.message}`)
         .join(', ');
@@ -95,13 +108,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: errorMessage,
-          details: error.errors // Keep detailed errors for debugging
+          details: error.errors
         },
         { status: 400 }
       );
     }
 
-    // Handle Prisma errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
         return NextResponse.json(
@@ -113,6 +125,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'Invalid category ID' },
           { status: 400 }
+        );
+      }
+      if (error.code === 'P2025') {
+        return NextResponse.json(
+          { error: 'Category not found' },
+          { status: 404 }
         );
       }
     }

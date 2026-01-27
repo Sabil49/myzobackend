@@ -7,7 +7,7 @@ import { updateProductSchema } from '@/lib/validators/product';
 import { Prisma } from '@prisma/client';
 import { ZodError } from 'zod';
 
-// GET /api/products/:id - Get single product
+// GET /api/products/:id
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -37,7 +37,7 @@ export async function GET(
   }
 }
 
-// PUT /api/products/:id - Update product (admin only)
+// PUT /api/products/:id
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -57,21 +57,41 @@ export async function PUT(
     const body = await request.json();
     const validatedData = updateProductSchema.parse(body);
 
-    // Clean the data - remove undefined/null categoryId
-    const cleanData = { ...validatedData };
-    if ('categoryId' in cleanData && !cleanData.categoryId) {
-      delete cleanData.categoryId;
+    // Build update data with proper typing
+    const updateData: Prisma.ProductUpdateInput = {};
+
+    // Add fields that are present in validatedData
+    if (validatedData.name !== undefined) updateData.name = validatedData.name;
+    if (validatedData.styleCode !== undefined) updateData.styleCode = validatedData.styleCode;
+    if (validatedData.description !== undefined) updateData.description = validatedData.description;
+    if (validatedData.price !== undefined) updateData.price = validatedData.price;
+    if (validatedData.stock !== undefined) updateData.stock = validatedData.stock;
+    if (validatedData.materials !== undefined) updateData.materials = validatedData.materials;
+    if (validatedData.dimensions !== undefined) updateData.dimensions = validatedData.dimensions;
+    if (validatedData.careInstructions !== undefined) updateData.careInstructions = validatedData.careInstructions;
+    if (validatedData.images !== undefined) updateData.images = validatedData.images;
+    if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;
+    if (validatedData.isFeatured !== undefined) updateData.isFeatured = validatedData.isFeatured;
+
+    // Handle categoryId: connect, disconnect, or leave unchanged
+    if (validatedData.categoryId !== undefined) {
+      if (validatedData.categoryId === null) {
+        // Disconnect category
+        updateData.category = { disconnect: true };
+      } else if (validatedData.categoryId) {
+        // Connect to new category
+        updateData.category = { connect: { id: validatedData.categoryId } };
+      }
     }
 
     const product = await prisma.product.update({
       where: { id },
-      data: cleanData as Prisma.ProductUncheckedUpdateInput,
+      data: updateData,
       include: { category: true },
     });
 
     return NextResponse.json(product);
   } catch (error: unknown) {
-    // Handle Zod validation errors
     if (error instanceof ZodError) {
       const errorMessage = error.errors
         .map((err) => `${err.path.join('.')}: ${err.message}`)
@@ -86,7 +106,6 @@ export async function PUT(
       );
     }
 
-    // Handle Prisma errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2025') {
         return NextResponse.json(
@@ -116,7 +135,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/products/:id - Delete product (admin only)
+// DELETE /api/products/:id
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -145,6 +164,12 @@ export async function DELETE(
         return NextResponse.json(
           { error: 'Product not found' },
           { status: 404 }
+        );
+      }
+      if (error.code === 'P2003') {
+        return NextResponse.json(
+          { error: 'Cannot delete product that is referenced in orders' },
+          { status: 409 }
         );
       }
     }
