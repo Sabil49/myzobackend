@@ -6,44 +6,51 @@ import { verifyAccessToken } from '@/lib/auth';
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   
-  console.log('Middleware - Path:', path);
+  console.log('[MIDDLEWARE] Request to:', path);
 
-  // Public paths that don't require authentication
+  // Public paths
   const publicPaths = [
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/refresh',
-    '/api/auth/verify', // Add debug endpoint
   ];
 
   if (publicPaths.includes(path)) {
-    console.log('Middleware - Public path, allowing');
+    console.log('[MIDDLEWARE] Public path, allowing');
     return NextResponse.next();
   }
 
-  // Check for token in Authorization header
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  // Check for token
+  const authHeader = request.headers.get('authorization');
+  console.log('[MIDDLEWARE] Authorization header:', authHeader ? 'Present' : 'Missing');
+  
+  const token = authHeader?.replace('Bearer ', '');
 
   if (!token) {
-    console.log('Middleware - No token provided for:', path);
+    console.log('[MIDDLEWARE] ❌ No token provided');
     return NextResponse.json(
       { error: 'Unauthorized - No token provided' },
       { status: 401 }
     );
   }
 
+  console.log('[MIDDLEWARE] Token received, length:', token.length);
+  console.log('[MIDDLEWARE] Token first 20 chars:', token.substring(0, 20));
+
   try {
     const payload = verifyAccessToken(token);
-    console.log('Middleware - Token valid for user:', payload.userId, 'role:', payload.role);
+    console.log('[MIDDLEWARE] ✅ Token valid for user:', payload.userId, 'role:', payload.role);
 
     // Check admin routes
     if (path.startsWith('/api/admin') && payload.role !== 'ADMIN') {
-      console.log('Middleware - User is not admin, denying access');
+      console.log('[MIDDLEWARE] ❌ User is not admin');
       return NextResponse.json(
         { error: 'Forbidden - Admin access required' },
         { status: 403 }
       );
     }
+
+    console.log('[MIDDLEWARE] ✅ Access granted to:', path);
 
     // Add user info to headers
     const requestHeaders = new Headers(request.headers);
@@ -56,7 +63,7 @@ export function middleware(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Middleware - Token verification failed:', error);
+    console.error('[MIDDLEWARE] ❌ Token verification failed:', error);
     return NextResponse.json(
       { error: 'Unauthorized - Invalid token' },
       { status: 401 }

@@ -1,19 +1,26 @@
 // lib/auth.ts
 
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+// Log the secret lengths (not the actual secrets for security)
+console.log('JWT_SECRET length:', JWT_SECRET?.length);
+console.log('JWT_REFRESH_SECRET length:', JWT_REFRESH_SECRET?.length);
+console.log('JWT_SECRET exists:', !!JWT_SECRET);
+console.log('JWT_REFRESH_SECRET exists:', !!JWT_REFRESH_SECRET);
 
 if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
   throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be defined in environment variables');
 }
 
-console.log('JWT_SECRET configured:', !!JWT_SECRET);
-console.log('JWT_REFRESH_SECRET configured:', !!JWT_REFRESH_SECRET);
+// Now TypeScript knows these are strings
+const JWT_SECRET_STRING: string = JWT_SECRET;
+const JWT_REFRESH_SECRET_STRING: string = JWT_REFRESH_SECRET;
 
-interface JWTPayload {
+interface JWTPayload extends JwtPayload {
   userId: string;
   email: string;
   role: 'ADMIN' | 'CUSTOMER';
@@ -31,53 +38,60 @@ export async function verifyPassword(
 }
 
 export function generateAccessToken(payload: JWTPayload): string {
-  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
-  console.log('Generated access token for user:', payload.userId);
+  console.log('[AUTH] Generating access token for user:', payload.userId);
+  const token = jwt.sign(payload, JWT_SECRET_STRING, { expiresIn: '15m' });
+  console.log('[AUTH] Access token generated, length:', token.length);
   return token;
 }
 
 export function generateRefreshToken(payload: JWTPayload): string {
-  const token = jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: '7d' });
-  console.log('Generated refresh token for user:', payload.userId);
+  console.log('[AUTH] Generating refresh token for user:', payload.userId);
+  const token = jwt.sign(payload, JWT_REFRESH_SECRET_STRING, { expiresIn: '7d' });
+  console.log('[AUTH] Refresh token generated, length:', token.length);
   return token;
 }
 
 export function verifyAccessToken(token: string): JWTPayload {
   try {
-    console.log('Verifying access token...');
-    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
-    console.log('Access token verified for user:', payload.userId, 'role:', payload.role);
+    console.log('[AUTH] Verifying access token, length:', token.length);
+    console.log('[AUTH] First 20 chars:', token.substring(0, 20));
+    
+    const decoded = jwt.verify(token, JWT_SECRET_STRING);
+    const payload = decoded as JWTPayload;
+    
+    console.log('[AUTH] ✅ Access token verified for user:', payload.userId, 'role:', payload.role);
     return payload;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
-      console.error('Access token expired');
+      console.error('[AUTH] ❌ Access token expired at:', error.expiredAt);
       throw new Error('Token expired');
     }
     if (error instanceof jwt.JsonWebTokenError) {
-      console.error('Invalid access token:', error.message);
+      console.error('[AUTH] ❌ Invalid access token:', error.message);
       throw new Error('Invalid token');
     }
-    console.error('Token verification error:', error);
+    console.error('[AUTH] ❌ Token verification error:', error);
     throw new Error('Invalid or expired token');
   }
 }
 
 export function verifyRefreshToken(token: string): JWTPayload {
   try {
-    console.log('Verifying refresh token...');
-    const payload = jwt.verify(token, JWT_REFRESH_SECRET) as JWTPayload;
-    console.log('Refresh token verified for user:', payload.userId);
+    console.log('[AUTH] Verifying refresh token, length:', token.length);
+    const decoded = jwt.verify(token, JWT_REFRESH_SECRET_STRING);
+    const payload = decoded as JWTPayload;
+    console.log('[AUTH] ✅ Refresh token verified for user:', payload.userId);
     return payload;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
-      console.error('Refresh token expired');
+      console.error('[AUTH] ❌ Refresh token expired');
       throw new Error('Refresh token expired');
     }
     if (error instanceof jwt.JsonWebTokenError) {
-      console.error('Invalid refresh token:', error.message);
+      console.error('[AUTH] ❌ Invalid refresh token:', error.message);
       throw new Error('Invalid refresh token');
     }
-    console.error('Refresh token verification error:', error);
+    console.error('[AUTH] ❌ Refresh token verification error:', error);
     throw new Error('Invalid or expired refresh token');
   }
 }
