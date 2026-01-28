@@ -1,63 +1,77 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { verifyAccessToken } from './lib/auth';
+// middleware.ts
 
-// Routes that require authentication
-const protectedRoutes = [
-  '/api/cart',
-  '/api/wishlist',
-  '/api/orders',
-  '/api/notifications/register',
-];
-
-// Routes that require admin role
-const adminRoutes = [
-  '/api/admin',
-  '/api/notifications/send',
-];
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAccessToken } from '@/lib/auth';
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const path = request.nextUrl.pathname;
+  
+  console.log('Middleware - Path:', path);
 
-  // Check if route requires authentication
-  const isProtected = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-  const isAdmin = adminRoutes.some((route) => pathname.startsWith(route));
+  // Public paths that don't require authentication
+  const publicPaths = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/refresh',
+    '/api/auth/verify', // Add debug endpoint
+  ];
 
-  if (isProtected || isAdmin) {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    try {
-      const payload = verifyAccessToken(token);
-
-      // Check admin routes
-      if (isAdmin && payload.role !== 'ADMIN') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-
-      // Add user info to headers for downstream use
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set('x-user-id', payload.userId);
-      requestHeaders.set('x-user-role', payload.role);
-
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-    } catch (error) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
+  if (publicPaths.includes(path)) {
+    console.log('Middleware - Public path, allowing');
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Check for token in Authorization header
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+
+  if (!token) {
+    console.log('Middleware - No token provided for:', path);
+    return NextResponse.json(
+      { error: 'Unauthorized - No token provided' },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const payload = verifyAccessToken(token);
+    console.log('Middleware - Token valid for user:', payload.userId, 'role:', payload.role);
+
+    // Check admin routes
+    if (path.startsWith('/api/admin') && payload.role !== 'ADMIN') {
+      console.log('Middleware - User is not admin, denying access');
+      return NextResponse.json(
+        { error: 'Forbidden - Admin access required' },
+        { status: 403 }
+      );
+    }
+
+    // Add user info to headers
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-user-id', payload.userId);
+    requestHeaders.set('x-user-role', payload.role);
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  } catch (error) {
+    console.error('Middleware - Token verification failed:', error);
+    return NextResponse.json(
+      { error: 'Unauthorized - Invalid token' },
+      { status: 401 }
+    );
+  }
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: [
+    '/api/products/:path*',
+    '/api/cart/:path*',
+    '/api/wishlist/:path*',
+    '/api/orders/:path*',
+    '/api/addresses/:path*',
+    '/api/admin/:path*',
+    '/api/notifications/:path*',
+  ],
 };
