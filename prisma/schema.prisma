@@ -240,3 +240,16 @@ model FCMToken {
   @@index([userId])
   @@map("fcm_tokens")
 }
+
+model RefreshTokenRevocation {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique // Hash of the refresh token
+  
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([revokedAt])
+  @@map("refresh_token_revocations")
+}

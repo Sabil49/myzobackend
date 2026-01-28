@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -60,6 +61,12 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      );
     }
     console.error('Registration error:', error);
     return NextResponse.json(
