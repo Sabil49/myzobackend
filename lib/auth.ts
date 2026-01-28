@@ -3,58 +3,46 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret';
 
-if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET environment variables are required');
-}
-
-export interface JWTPayload {
+interface JWTPayload {
   userId: string;
-  email?: string;
-  role: string;
+  email: string;
+  role: 'ADMIN' | 'CUSTOMER';
 }
 
-export const hashPassword = async (password: string): Promise<string> => {
+export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
-};
+}
 
-export const verifyPassword = async (
+export async function verifyPassword(
   password: string,
   hashedPassword: string
-): Promise<boolean> => {
+): Promise<boolean> {
   return bcrypt.compare(password, hashedPassword);
-};
+}
 
-export const generateAccessToken = (payload: JWTPayload): string => {
+export function generateAccessToken(payload: JWTPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
-};
+}
 
-export const generateRefreshToken = (payload: JWTPayload): string => {
+export function generateRefreshToken(payload: JWTPayload): string {
   return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: '7d' });
-};
+}
 
-const validatePayload = (payload: unknown): JWTPayload => {
-  if (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'userId' in payload &&
-    'role' in payload &&
-    typeof (payload as Record<string, unknown>).userId === 'string' &&
-    typeof (payload as Record<string, unknown>).role === 'string'
-  ) {
-    return payload as JWTPayload;
+export function verifyAccessToken(token: string): JWTPayload {
+  try {
+    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+  } catch{
+    throw new Error('Invalid or expired token');
   }
-  throw new Error('Invalid JWT payload structure');
-};
+}
 
-export const verifyAccessToken = (token: string): JWTPayload => {
-  const payload = jwt.verify(token, JWT_SECRET);
-  return validatePayload(payload);
-};
-
-export const verifyRefreshToken = (token: string): JWTPayload => {
-  const payload = jwt.verify(token, JWT_REFRESH_SECRET);
-  return validatePayload(payload);
-};
+export function verifyRefreshToken(token: string): JWTPayload {
+  try {
+    return jwt.verify(token, JWT_REFRESH_SECRET) as JWTPayload;
+  } catch {
+    throw new Error('Invalid or expired refresh token');
+  }
+}

@@ -1,8 +1,9 @@
+// app/api/auth/register/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -17,10 +18,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = registerSchema.parse(body);
 
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validatedData.email },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      );
+    }
+
     // Hash password
     const passwordHash = await hashPassword(validatedData.password);
 
-    // Create user - let DB unique constraint handle duplicates
+    // Create user (always CUSTOMER role for registration)
     const user = await prisma.user.create({
       data: {
         email: validatedData.email,
@@ -28,6 +41,7 @@ export async function POST(request: NextRequest) {
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
         phone: validatedData.phone,
+        role: 'CUSTOMER', // Force CUSTOMER role
       },
       select: {
         id: true,
@@ -45,20 +59,8 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues }, { status: 400 });
+      return NextResponse.json({ error: error.errors }, { status: 400 });
     }
-    
-    // Handle Prisma unique constraint violation
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 400 }
-      );
-    }
-    
     console.error('Registration error:', error);
     return NextResponse.json(
       { error: 'Failed to create user' },

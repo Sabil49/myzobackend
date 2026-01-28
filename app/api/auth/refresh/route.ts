@@ -1,3 +1,5 @@
+// app/api/auth/refresh/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import {
   verifyRefreshToken,
@@ -26,12 +28,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Generate new tokens
     const newPayload = {
       userId: user.id,
+      email: user.email,
       role: user.role,
     };
 

@@ -1,3 +1,5 @@
+// app/api/auth/login/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
@@ -24,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid credentials' },
+        { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValid) {
       return NextResponse.json(
-        { error: 'Invalid credentials' },
+        { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     // Generate tokens
     const payload = {
       userId: user.id,
+      email: user.email,
       role: user.role,
     };
 
@@ -64,17 +67,8 @@ export async function POST(request: NextRequest) {
       refreshToken,
     });
   } catch (error: unknown) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'name' in error &&
-      (error as { name: string }).name === 'ZodError'
-    ) {
-      // Cast error to ZodError to access errors property
-      return NextResponse.json(
-        { error: (error as unknown as z.ZodError).errors },
-        { status: 400 }
-      );
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
     }
     console.error('Login error:', error);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
