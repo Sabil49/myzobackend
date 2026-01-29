@@ -18,14 +18,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = verifyAccessToken(token);
-    if (payload.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    let payload;
+    try {
+      payload = verifyAccessToken(token);
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (!payload || payload.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     // Parse multipart form data
     const formData = await request.formData();
-    const files = formData.getAll('images') as File[];
+    const entries = formData.getAll('images');
+    
+    // Filter and validate that entries are File instances
+    const files = entries.filter((entry) => entry instanceof File) as File[];
 
     if (!files || files.length === 0) {
       return NextResponse.json(

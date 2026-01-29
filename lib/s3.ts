@@ -22,10 +22,6 @@ interface UploadResult {
 
 /**
  * Upload image to S3
- * @param buffer - Image buffer
- * @param mimetype - Image MIME type
- * @param folder - Folder in S3 bucket (e.g., 'products', 'categories')
- * @returns URL and key of uploaded image
  */
 export async function uploadImageToS3(
   buffer: Buffer,
@@ -41,13 +37,13 @@ export async function uploadImageToS3(
   // Generate unique filename
   const filename = `${folder}/${uuidv4()}.jpg`;
 
-  // Upload to S3
+  // Upload to S3 (without ACL)
   const command = new PutObjectCommand({
     Bucket: BUCKET_NAME,
     Key: filename,
     Body: optimizedBuffer,
     ContentType: 'image/jpeg',
-    ACL: 'public-read', // Make images publicly accessible
+    // ACL: 'public-read', // REMOVED - causes error
   });
 
   await s3Client.send(command);
