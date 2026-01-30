@@ -19,7 +19,7 @@ const updateAddressSchema = z.object({
 // GET /api/addresses/[id] - Get a single address
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -32,13 +32,15 @@ export async function GET(
     
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
+    } catch {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    const { id } = await params;
+
     const address = await prisma.address.findFirst({
       where: {
-        id: params.id,
+        id: id,
         userId: payload.userId,
       },
     });
