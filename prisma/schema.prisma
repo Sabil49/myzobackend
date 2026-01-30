@@ -95,6 +95,7 @@ model Product {
   isFeatured    Boolean   @default(false)
   
   wishlistedBy  Wishlist[]
+  isWishlisted  Boolean   @default(false)
   cartItems     CartItem[]
   orderItems    OrderItem[]
   

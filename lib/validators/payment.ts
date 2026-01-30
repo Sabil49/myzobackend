@@ -1,3 +1,4 @@
+// lib/validators/payment.ts
 import { z } from 'zod';
 
 export const stripePaymentIntentSchema = z.object({

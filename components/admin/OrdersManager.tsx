@@ -1,3 +1,4 @@
+// components/admin/OrdersManager.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';

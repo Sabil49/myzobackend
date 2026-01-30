@@ -1,3 +1,4 @@
+// app/api/notifications/send/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/firebase-admin';
