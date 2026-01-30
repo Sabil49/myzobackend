@@ -32,6 +32,8 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+// middleware.ts
+
 export const config = {
   matcher: [
     '/api/products/:path*',
@@ -40,6 +42,6 @@ export const config = {
     '/api/orders/:path*',
     '/api/addresses/:path*',
     '/api/admin/:path*',
-    '/api/notifications/:path*',
+    // '/api/notifications/:path*',  // REMOVE THIS - notifications should work without auth
   ],
 };

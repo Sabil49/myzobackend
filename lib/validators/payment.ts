@@ -13,3 +13,10 @@ export const razorpayVerifySchema = z.object({
   razorpay_payment_id: z.string(),
   razorpay_signature: z.string(),
 });
+
+export const dodoPaymentSchema = z.object({
+  amount: z.number().min(1),
+  currency: z.string().length(3),
+  customerEmail: z.string().email(),
+  orderId: z.string().cuid(),
+});

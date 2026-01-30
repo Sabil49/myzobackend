@@ -37,9 +37,11 @@ export async function verifyPassword(
   return bcrypt.compare(password, hashedPassword);
 }
 
+// lib/auth.ts
+
 export function generateAccessToken(payload: JWTPayload): string {
   console.log('[AUTH] Generating access token for user:', payload.userId);
-  const token = jwt.sign(payload, JWT_SECRET_STRING, { expiresIn: '15m' });
+  const token = jwt.sign(payload, JWT_SECRET_STRING, { expiresIn: '24h' }); // Changed from 15m to 24h
   console.log('[AUTH] Access token generated, length:', token.length);
   return token;
 }
