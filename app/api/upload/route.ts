@@ -4,12 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '@/lib/auth';
 import { uploadMultipleImagesToS3 } from '@/lib/s3';
 
-export const config = {
-  api: {
-    bodyParser: false, // Disable body parsing for file uploads
-  },
-};
-
 export async function POST(request: NextRequest) {
   try {
     // Verify admin access

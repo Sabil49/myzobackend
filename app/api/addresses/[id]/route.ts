@@ -22,6 +22,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,15 +33,13 @@ export async function GET(
     
     try {
       payload = verifyAccessToken(token);
-    } catch {
+    } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { id } = await params;
-
     const address = await prisma.address.findFirst({
       where: {
-        id: id,
+        id,
         userId: payload.userId,
       },
     });
@@ -62,9 +61,10 @@ export async function GET(
 // PATCH /api/addresses/[id] - Update an address
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -85,7 +85,7 @@ export async function PATCH(
     // Verify address belongs to user
     const existingAddress = await prisma.address.findFirst({
       where: {
-        id: params.id,
+        id,
         userId: payload.userId,
       },
     });
@@ -99,7 +99,7 @@ export async function PATCH(
       await prisma.address.updateMany({
         where: {
           userId: payload.userId,
-          id: { not: params.id },
+          id: { not: id },
           isDefault: true,
         },
         data: {
@@ -109,7 +109,7 @@ export async function PATCH(
     }
 
     const address = await prisma.address.update({
-      where: { id: params.id },
+      where: { id },
       data: validatedData,
     });
 
@@ -133,9 +133,10 @@ export async function PATCH(
 // DELETE /api/addresses/[id] - Delete an address
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -153,7 +154,7 @@ export async function DELETE(
     // Verify address belongs to user
     const address = await prisma.address.findFirst({
       where: {
-        id: params.id,
+        id,
         userId: payload.userId,
       },
     });
@@ -164,7 +165,7 @@ export async function DELETE(
 
     // Check if address is used in any orders
     const ordersWithAddress = await prisma.order.count({
-      where: { addressId: params.id },
+      where: { addressId: id },
     });
 
     if (ordersWithAddress > 0) {
@@ -175,7 +176,7 @@ export async function DELETE(
     }
 
     await prisma.address.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     // If this was the default address, set another as default

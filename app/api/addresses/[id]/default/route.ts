@@ -10,7 +10,6 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,7 +31,7 @@ export async function PATCH(
     // Verify address belongs to user
     const address = await prisma.address.findFirst({
       where: {
-        id: id,
+        id,
         userId: payload.userId,
       },
     });
@@ -54,7 +53,7 @@ export async function PATCH(
 
     // Set this address as default
     const updatedAddress = await prisma.address.update({
-      where: { id: id },
+      where: { id },
       data: { isDefault: true },
     });
 
