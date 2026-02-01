@@ -1,42 +1,46 @@
 // app/api/payments/dodo/create/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '@/lib/auth';
-import { dodoPaymentSchema } from '@/lib/validators/payment';
-import { z } from 'zod';
+
+const DODO_API_KEY = process.env.DODO_PAYMENTS_API_KEY!;
+const DODO_RETURN_URL = process.env.DODO_PAYMENTS_RETURN_URL!;
+const DODO_ENVIRONMENT = process.env.DODO_PAYMENTS_ENVIRONMENT || 'test_mode';
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    verifyAccessToken(token);
-    const body = await request.json();
-        const validatedData = dodoPaymentSchema.parse(body);
+    const token = authHeader.slice('Bearer '.length);
+    let payload;
     
-        // TODO: Integrate with Dodo Payments API
-        // const dodoResponse = await fetch('DODO_API_URL', {
-        //   method: 'POST',
-        //   headers: {
-        //     'Authorization': `Bearer ${process.env.DODO_API_KEY}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify(validatedData),
-    // });
-    
-        return NextResponse.json({
-          success: true,
-          paymentId: 'dodo_' + Date.now(), // Replace with actual Dodo payment ID
-          // Add other Dodo response fields
-          validatedData, // Include validatedData in the response to use the variable
-        });
-  } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 });
+    try {
+      payload = verifyAccessToken(token);
+    } catch (error) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
-    console.error('Dodo payment error:', error);
+
+    const body = await request.json();
+    const { amount, orderId, items } = body;
+
+    if (!amount || !orderId) {
+      return NextResponse.json(
+        { error: 'Amount and orderId are required' },
+        { status: 400 }
+      );
+    }
+
+    // Create Dodo Payments checkout session
+    const checkoutUrl = `https://${DODO_ENVIRONMENT === 'test_mode' ? 'test.' : ''}checkout.dodopayments.com/buy/pdt_ctSjb2435t8p2c1vQcx98?quantity=1&redirect_url=${encodeURIComponent(DODO_RETURN_URL + '?orderId=' + orderId)}`;
+
+    return NextResponse.json({
+      checkoutUrl,
+      orderId,
+    });
+  } catch (error) {
+    console.error('Dodo payment creation error:', error);
     return NextResponse.json(
       { error: 'Failed to create payment' },
       { status: 500 }
