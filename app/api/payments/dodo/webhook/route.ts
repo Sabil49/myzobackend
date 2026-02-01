@@ -1,23 +1,59 @@
-// app/api/payments/dodo/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
-const DODO_WEBHOOK_KEY = process.env.DODO_PAYMENTS_WEBHOOK_KEY!;
+interface DodoPaymentData {
+  orderId: string;
+  reason?: string;
+}
+
+// Validate required environment variable at startup
+const DODO_WEBHOOK_KEY = process.env.DODO_PAYMENTS_WEBHOOK_KEY;
+if (!DODO_WEBHOOK_KEY) {
+  throw new Error('Missing required environment variable: DODO_PAYMENTS_WEBHOOK_KEY');
+}
+
+// Constant-time comparison function
+const constantTimeCompare = (a: Buffer, b: Buffer): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+};
 
 export async function POST(request: NextRequest) {
   try {
     const signature = request.headers.get('dodo-signature');
     
-    if (!signature || !signature.startsWith(DODO_WEBHOOK_KEY)) {
-      console.error('Invalid webhook signature');
+    if (!signature) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    const body = await request.json();
+    // Read the raw request body as text
+    const rawBody = await request.text();
+    
+    // Compute expected HMAC-SHA256 signature
+    const expectedSignature = createHmac('sha256', DODO_WEBHOOK_KEY!)
+      .update(rawBody)
+      .digest();
+
+    const isValid = constantTimeCompare(
+      Buffer.from(signature, 'hex'),
+      expectedSignature
+    );
+
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    const body = JSON.parse(rawBody);
     const { event, data } = body;
 
-    console.log('Dodo webhook received:', event, data);
-
+    console.log('Dodo webhook received:', event, 'orderId:', data?.orderId);
     switch (event) {
       case 'payment.succeeded':
         await handlePaymentSucceeded(data);
@@ -39,9 +75,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handlePaymentSucceeded(data: any) {
+async function handlePaymentSucceeded(data: DodoPaymentData) {
   try {
-    const { orderId, amount, transactionId } = data;
+    const { orderId } = data;
 
     if (!orderId) {
       console.error('No orderId in payment success webhook');
@@ -49,15 +85,24 @@ async function handlePaymentSucceeded(data: any) {
     }
 
     // Update order status
-    const order = await prisma.order.update({
-      where: { id: orderId },
+    // Update order status only if in expected state
+    const order = await prisma.order.updateMany({
+      where: { 
+        id: orderId,
+        paymentStatus: 'PENDING',  // Only update if still pending
+      },
       data: {
         paymentStatus: 'PAID',
         status: 'CONFIRMED',
       },
     });
 
-    console.log('Order updated after successful payment:', order.id);
+    if (order.count === 0) {
+      console.warn('Order not updated (not found or not pending):', orderId);
+      return;
+    }
+
+    console.log('Order updated after successful payment:', orderId);
 
     // TODO: Send confirmation email
     // TODO: Send push notification
@@ -67,7 +112,7 @@ async function handlePaymentSucceeded(data: any) {
   }
 }
 
-async function handlePaymentFailed(data: any) {
+async function handlePaymentFailed(data: DodoPaymentData) {
   try {
     const { orderId, reason } = data;
 

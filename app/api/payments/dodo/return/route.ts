@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const orderId = searchParams.get('orderId');
-    const status = searchParams.get('status');
 
     if (!orderId) {
       return NextResponse.redirect(new URL('/orders?error=missing_order_id', request.url));
@@ -22,15 +21,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Redirect based on status
-    if (status === 'success' || order.paymentStatus === 'PAID') {
+    if (order.paymentStatus === 'PAID') {
       return NextResponse.redirect(
         new URL(`/order-success?orderId=${orderId}`, request.url)
       );
-    } else if (status === 'cancelled') {
+    } else if (order.paymentStatus === 'FAILED') {
       return NextResponse.redirect(
         new URL(`/order-cancelled?orderId=${orderId}`, request.url)
       );
     } else {
+      // Payment pending or in other state - show order details
       return NextResponse.redirect(
         new URL(`/orders/${orderId}`, request.url)
       );
