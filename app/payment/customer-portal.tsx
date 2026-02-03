@@ -56,6 +56,10 @@ export default function CustomerPortal({ customerId: customerIdProp }: { custome
     setLoading(false);
   };
 
+  if (!userSession) {
+    return null;
+  }
+
   const isDisabled = !customerId || loading;
 
   return (
