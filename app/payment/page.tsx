@@ -1,3 +1,5 @@
+// app/payment/page.tsx
+"use client";
 import SubscribeButton from "./checkout";
 import CustomerPortal from "./customer-portal";
 
