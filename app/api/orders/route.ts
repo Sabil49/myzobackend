@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Atomically update product stock and validate availability
-      const itemsWithPrices = [];
+      const itemsWithPrices: Array<{ productId: string; quantity: number; price: number }> = [];
 
       for (const item of validatedData.items) {
         // Atomically check and decrement stock in a single operation
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         itemsWithPrices.push({
           productId: item.productId,
           quantity: item.quantity,
-          price: product.price,
+          price: Number(product.price),
         });
       }
 
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
       // Map payment method to uppercase for Prisma enum
-      const paymentMethodMap: Record<string, string> = {
+      const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY' | 'DODO'> = {
        'stripe': 'STRIPE',
        'razorpay': 'RAZORPAY',
        'dodo': 'DODO',    // ← ADD THIS
@@ -160,11 +160,13 @@ export async function POST(request: NextRequest) {
           shippingCost,
           tax,
           total,
-          paymentMethod: paymentMethodMap[validatedData.paymentMethod],
+          paymentMethod: paymentMethodMap[validatedData.paymentMethod] as 'STRIPE' | 'RAZORPAY' | 'DODO',
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
-            create: itemsWithPrices,
+            createMany: {
+              data: itemsWithPrices,
+            },
           },
           statusHistory: {
             create: {
