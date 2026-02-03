@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status'); // "succeeded", "failed", "cancelled"
 
     console.log('Dodo return called:', { orderId, paymentId, status });
-
+    console.log('Full return URL:', request.url);
     if (!orderId) {
       console.error('Missing orderId in return URL');
       return NextResponse.redirect(
@@ -114,7 +114,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    console.log('Dodo webhook received:', body);
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) {
+      console.log('Dodo webhook received (dev mode, full payload):', body);
+    } else {
+      console.log('Dodo webhook received');
+    }
 
     // Extract data from webhook payload
     const orderId = body.metadata?.order_id || body.order_id;
@@ -131,13 +136,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!order) {
-      console.error('Order not found:', orderId);
+      console.error('Order not found:', maskId(orderId));
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
     // Update order based on webhook status
     if (paymentStatus === 'succeeded' || paymentStatus === 'success' || paymentStatus === 'completed') {
-      console.log('Webhook: Processing successful payment for order:', orderId);
+      logPaymentEvent('Webhook: Processing successful payment for order', orderId, paymentId, paymentStatus);
       
       await prisma.order.update({
         where: { id: orderId },
@@ -156,8 +161,9 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      console.log('✅ Webhook: Order payment confirmed:', orderId);
+      logPaymentEvent('✅ Webhook: Order payment confirmed', orderId, paymentId, paymentStatus);
     } else if (paymentStatus === 'failed') {
+      logPaymentEvent('Webhook: Payment failed for order', orderId, paymentId, paymentStatus);
       await prisma.order.update({
         where: { id: orderId },
         data: {
@@ -165,6 +171,7 @@ export async function POST(request: NextRequest) {
         },
       });
     } else if (paymentStatus === 'cancelled') {
+      logPaymentEvent('Webhook: Payment cancelled for order', orderId, paymentId, paymentStatus);
       await prisma.order.update({
         where: { id: orderId },
         data: {
@@ -174,7 +181,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ received: true, orderId });
+    return NextResponse.json({ received: true, orderId: maskId(orderId) });
 
   } catch (error) {
     console.error('Dodo webhook error:', error);
