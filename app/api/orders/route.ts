@@ -144,9 +144,10 @@ export async function POST(request: NextRequest) {
       const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
       // Map payment method to uppercase for Prisma enum
-      const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY'> = {
-        'stripe': 'STRIPE',
-        'razorpay': 'RAZORPAY',
+      const paymentMethodMap: Record<string, string> = {
+       'stripe': 'STRIPE',
+       'razorpay': 'RAZORPAY',
+       'dodo': 'DODO',    // ← ADD THIS
       };
 
       // Create order

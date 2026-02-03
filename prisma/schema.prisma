@@ -177,6 +177,7 @@ model Order {
 enum PaymentMethod {
   STRIPE
   RAZORPAY
+  DODO
 }
 
 enum OrderStatus {

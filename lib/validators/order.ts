@@ -8,7 +8,7 @@ export const createOrderSchema = z.object({
     productId: z.string().cuid(),
     quantity: z.number().int().positive(),
   })).min(1),
-  paymentMethod: z.enum(['stripe', 'razorpay']),
+  paymentMethod: z.enum(['stripe', 'razorpay', 'dodo']),
 });
 
 export const updateOrderStatusSchema = z.object({
