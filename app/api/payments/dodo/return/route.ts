@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const orderId = searchParams.get('orderId');
+    console.log('Dodo return called with orderId:', orderId);
     const status = searchParams.get('status'); // Dodo passes payment status
     const paymentId = searchParams.get('payment_id'); // Dodo payment ID
 
