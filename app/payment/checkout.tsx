@@ -2,23 +2,43 @@
 import { useSession } from "next-auth/react";
 import { useState } from "react";
 
-export default function SubscribeButton() {
+export default function SubscribeButton({ planId }: { planId?: string }) {
   
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Get the current user session
   const { data: userSession } = useSession();
-  const email= userSession?.user?.email || "test@example.com";
-  const planId = "pdt_ctSjb2435t8p2c1vQcx98"; // replace with your actual plan ID from Dodo Payments
+  const email = userSession?.user?.email;
 
   const createCheckoutSession = async () => {
-  setLoading(true);
-  setError(null);
-  console.log('Creating checkout session for plan:', planId);
-  try {
+    setLoading(true);
+    setError(null);
+    console.log('Creating checkout session for plan:', planId);
+    try {
+      // Validate session, email and planId before proceeding
+      if (!userSession) {
+        setError('You must be signed in to proceed to checkout.');
+        setLoading(false);
+        return;
+      }
 
-    const response = await fetch('api/payment/dodo/checkout', {
+      if (!email) {
+        setError('Your account is missing an email address. Please verify your profile.');
+        setLoading(false);
+        return;
+      }
+
+      if (!planId) {
+        setError('No plan selected for checkout.');
+        setLoading(false);
+        return;
+      }
+    const customer = {
+      email: email
+    };
+
+    const response = await fetch('/api/payment/dodo/checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -33,10 +53,7 @@ export default function SubscribeButton() {
           }
         ],        
         // Pre-fill customer information to reduce checkout friction
-        customer: {
-          email: email,
-          name: userSession?.user?.name || "Test User",
-        },
+        customer,
         //  allowed_payment_method_types: ["amazon_pay", "google_pay", "upi", "credit", "debit"], // adjust to what Dodo supports
 
       })
