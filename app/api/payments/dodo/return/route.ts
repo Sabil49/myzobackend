@@ -12,8 +12,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status'); // "succeeded", "failed", "cancelled"
 
     console.log('Dodo return called:', { orderId, paymentId, status });
-    console.log('Full return URL:', request.url);
-    console.log('Full search params:', searchParams.toString());
+    
     if (!orderId) {
       console.error('Missing orderId in return URL');
       return NextResponse.redirect(
