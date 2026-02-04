@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // TODO: Integrate with actual Dodo Payments API
     // For now, return a mock response with the checkout URL
     
-    const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXgQE3X38XuYO64NYuMb';
+    const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI';
     const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
     
