@@ -13,19 +13,19 @@ const dodoPaymentSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // ---- AUTH ----
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // const authHeader = request.headers.get("authorization");
+    // if (!authHeader?.startsWith("Bearer ")) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
 
-    const token = authHeader.slice("Bearer ".length);
-    let payload;
+    //const token = authHeader.slice("Bearer ".length);
+    //let payload;
 
-    try {
-      payload = verifyAccessToken(token);
-    } catch {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
+    // try {
+    //   payload = verifyAccessToken(token);
+    // } catch {
+    //   return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    // }
 
     // ---- VALIDATE BODY ----
     const body = await request.json();
@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    if (order.userId !== payload.userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
+    // if (order.userId !== payload.userId) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    // }
 
     if (!order.user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
