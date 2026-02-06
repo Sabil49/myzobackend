@@ -15,7 +15,6 @@ model User {
   lastName      String
   phone         String?
   role          UserRole  @default(CUSTOMER)
-  fcmToken      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -24,6 +23,7 @@ model User {
   cart          Cart?
   wishlist      Wishlist?
   notifications Notification[]
+  fcmTokens     FCMToken[]
 
   @@index([email])
   @@map("users")
@@ -239,4 +239,18 @@ model Notification {
   @@index([userId])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model FCMToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("fcm_tokens")
 }
