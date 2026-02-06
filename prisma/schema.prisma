@@ -112,7 +112,6 @@ model Wishlist {
   items     WishlistItem[]
 
   @@map("wishlists")
-  @@map("product")
 }
 
 model WishlistItem {

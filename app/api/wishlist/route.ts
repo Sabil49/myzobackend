@@ -18,23 +18,29 @@ export async function GET(request: NextRequest) {
 
     const payload = verifyAccessToken(token);
 
-    const wishlistItems = await prisma.wishlist.findMany({
+    const wishlist = await prisma.wishlist.findUnique({
       where: { userId: payload.userId },
-      select: {
-        id: true,
-        createdAt: true,
-        product: {
+      include: {
+        items: {
           select: {
             id: true,
-            name: true,
-            price: true,
-            images: true,
-            stock: true,
+            createdAt: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                images: true,
+                stockQuantity: true,
+              },
+            },
           },
+          orderBy: { createdAt: 'desc' },
         },
       },
-      orderBy: { createdAt: 'desc' },
     });
+
+    const wishlistItems = wishlist?.items || [];
 
     return NextResponse.json({ wishlistItems });
   } catch (error) {
