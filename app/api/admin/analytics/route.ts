@@ -1,9 +1,7 @@
-// app/api/admin/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
 
-// GET /api/admin/analytics
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -33,21 +31,14 @@ export async function GET(request: NextRequest) {
       topProducts,
       ordersByStatus,
     ] = await Promise.all([
-      // Total orders
       prisma.order.count(),
-
-      // Total revenue
       prisma.order.aggregate({
         where: { paymentStatus: 'PAID' },
         _sum: { total: true },
       }),
-
-      // Total customers
       prisma.user.count({
         where: { role: 'CUSTOMER' },
       }),
-
-      // Recent orders
       prisma.order.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
@@ -60,8 +51,6 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-
-      // Top products
       prisma.orderItem.groupBy({
         by: ['productId'],
         _sum: { quantity: true },
@@ -69,16 +58,25 @@ export async function GET(request: NextRequest) {
         orderBy: { _sum: { quantity: 'desc' } },
         take: 10,
       }),
-
-      // Orders by status
       prisma.order.groupBy({
         by: ['status'],
         _count: { status: true },
       }),
     ]);
 
-    // Fetch product details for top products
-    const productIds = topProducts.map((p) => p.productId);
+    // Local typings for the grouped result and product selection
+    type TopProductGroup = {
+      productId: string;
+      _sum: { quantity: number | null };
+      _count: { productId: number };
+    };
+    type ProductMinimal = {
+      id: string;
+      name: string;
+      images: unknown;
+    };
+
+    const productIds = (topProducts as TopProductGroup[]).map((p) => p.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: {
@@ -86,13 +84,13 @@ export async function GET(request: NextRequest) {
         name: true,
         images: true,
       },
-    });
+    }) as ProductMinimal[];
 
-    const topProductsWithDetails = topProducts.map((tp) => {
-      const product = products.find((p) => p.id === tp.productId);
+    const topProductsWithDetails = (topProducts as TopProductGroup[]).map((tp) => {
+      const product = products.find((p) => p.id === tp.productId) as (ProductMinimal & { deleted?: boolean }) | undefined;
       return {
         product: product || { id: tp.productId, name: 'Deleted product', deleted: true },
-        totalSold: tp._sum.quantity || 0,
+        totalSold: tp._sum.quantity ?? 0,
         orderCount: tp._count.productId,
       };
     });
