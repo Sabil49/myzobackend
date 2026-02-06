@@ -78,19 +78,18 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Fetch product details for top products
-    const productIds = topProducts.map((p: typeof topProducts[number]) => p.productId);
+    const productIds = topProducts.map((p) => p.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: {
         id: true,
         name: true,
-        styleCode: true,
         images: true,
       },
     });
 
-    const topProductsWithDetails = topProducts.map((tp: typeof topProducts[number]) => {
-      const product = products.find((p: typeof products[number]) => p.id === tp.productId);
+    const topProductsWithDetails = topProducts.map((tp) => {
+      const product = products.find((p) => p.id === tp.productId);
       return {
         product: product || { id: tp.productId, name: 'Deleted product', deleted: true },
         totalSold: tp._sum.quantity || 0,
