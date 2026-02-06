@@ -50,7 +50,6 @@ export async function GET(request: NextRequest) {
             name: true,
             price: true,
             images: true,
-            styleCode: true,
             stock: true,
           },
         },
