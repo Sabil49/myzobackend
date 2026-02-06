@@ -31,13 +31,6 @@ export async function PUT(
       where: { id },
       data: {
         status: validatedData.status,
-        carrier: validatedData.carrier,
-        statusHistory: {
-          create: {
-            status: validatedData.status,
-            notes: validatedData.notes,
-          },
-        },
       },
     });
 
