@@ -40,7 +40,6 @@ export async function GET(
             },
           },
         },
-        shippingAddress: true,
         statusHistory: {
           orderBy: { createdAt: 'desc' },
         },
