@@ -20,7 +20,9 @@ export async function GET(request: NextRequest) {
 
     const wishlistItems = await prisma.wishlist.findMany({
       where: { userId: payload.userId },
-      include: {
+      select: {
+        id: true,
+        createdAt: true,
         product: {
           select: {
             id: true,
@@ -57,12 +59,10 @@ export async function POST(request: NextRequest) {
     const validatedData = toggleWishlistSchema.parse(body);
 
     // Check if already in wishlist
-    const existing = await prisma.wishlist.findUnique({
+    const existing = await prisma.wishlist.findFirst({
       where: {
-        userId_productId: {
-          userId: payload.userId,
-          productId: validatedData.productId,
-        },
+        userId: payload.userId,
+        productId: validatedData.productId,
       },
     });
 
