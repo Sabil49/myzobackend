@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
           status: 'CONFIRMED',
         },
       });
-
+      console.log('Webhook: Order updated to PAID and CONFIRMED for order:', orderId);
       await prisma.orderStatusHistory.create({
         data: {
           orderId,
