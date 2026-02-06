@@ -40,9 +40,6 @@ export async function GET(
             },
           },
         },
-        statusHistory: {
-          orderBy: { createdAt: 'desc' },
-        },
       },
     });
 
