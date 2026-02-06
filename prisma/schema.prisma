@@ -160,7 +160,7 @@ model Order {
   total         Float
   status        OrderStatus   @default(PLACED)
   paymentStatus PaymentStatus @default(PENDING)
-  paymentMethod String        @default("CARD")
+  paymentMethod String        @default("COD")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
