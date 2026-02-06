@@ -64,19 +64,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Local typings for the grouped result and product selection
-    type TopProductGroup = {
-      productId: string;
-      _sum: { quantity: number | null };
-      _count: { productId: number };
-    };
-    type ProductMinimal = {
-      id: string;
-      name: string;
-      images: unknown;
-    };
-
-    const productIds = (topProducts as TopProductGroup[]).map((p) => p.productId);
+    const productIds = topProducts.map((p: { productId: string; _sum: { quantity: number | null }; _count: { productId: number } }) => p.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: {
@@ -84,13 +72,19 @@ export async function GET(request: NextRequest) {
         name: true,
         images: true,
       },
-    }) as ProductMinimal[];
+    });
 
-    const topProductsWithDetails = (topProducts as TopProductGroup[]).map((tp) => {
-      const product = products.find((p) => p.id === tp.productId) as (ProductMinimal & { deleted?: boolean }) | undefined;
+    type Product = {
+      id: string;
+      name: string;
+      images: string[];
+    };
+
+    const topProductsWithDetails = topProducts.map((tp: { productId: string; _sum: { quantity: number | null }; _count: { productId: number } }) => {
+      const product = products.find((p: Product) => p.id === tp.productId);
       return {
         product: product || { id: tp.productId, name: 'Deleted product', deleted: true },
-        totalSold: tp._sum.quantity ?? 0,
+        totalSold: tp._sum.quantity || 0,
         orderCount: tp._count.productId,
       };
     });

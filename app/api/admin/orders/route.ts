@@ -2,9 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
-import { OrderStatus } from '@prisma/client';
-// Removed invalid import of OrderWhereInput
-// GET /api/admin/orders - Get all orders
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -13,39 +11,35 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
-
     let payload;
+    
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    } catch {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }
 
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload?.userId || payload.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
-    const pageParam = parseInt(searchParams.get('page') || '1', 10);
-    const limitParam = parseInt(searchParams.get('limit') || '50', 10);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const status = searchParams.get('status');
-
-    const MAX_LIMIT = 100;
-    const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
-    const limit = isNaN(limitParam) || limitParam < 1 ? 50 : Math.min(limitParam, MAX_LIMIT);
     const skip = (page - 1) * limit;
 
-    
-
-    const where: { status?: OrderStatus } = {};
-    if (status && Object.values(OrderStatus).includes(status as OrderStatus)) {
-      where.status = status as OrderStatus;
+    const where: Record<string, unknown> = {};
+    if (status) {
+      where.status = status;
     }
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
         include: {
           user: {
             select: {
@@ -55,20 +49,19 @@ export async function GET(request: NextRequest) {
               lastName: true,
             },
           },
+          address: true,
           items: {
             include: {
               product: {
                 select: {
                   id: true,
                   name: true,
+                  images: true,
                 },
               },
             },
           },
         },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
       }),
       prisma.order.count({ where }),
     ]);
