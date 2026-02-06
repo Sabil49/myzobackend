@@ -64,25 +64,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = toggleWishlistSchema.parse(body);
 
-    // Check if already in wishlist
-    const existing = await prisma.wishlist.findFirst({
+    // Get or create wishlist for user
+    let wishlist = await prisma.wishlist.findUnique({
+      where: { userId: payload.userId },
+    });
+
+    if (!wishlist) {
+      wishlist = await prisma.wishlist.create({
+        data: { userId: payload.userId },
+      });
+    }
+
+    // Check if product already in wishlist
+    const existing = await prisma.wishlistItem.findFirst({
       where: {
-        userId: payload.userId,
+        wishlistId: wishlist.id,
         productId: validatedData.productId,
       },
     });
 
     if (existing) {
       // Remove from wishlist
-      await prisma.wishlist.delete({
+      await prisma.wishlistItem.delete({
         where: { id: existing.id },
       });
       return NextResponse.json({ message: 'Removed from wishlist' });
     } else {
       // Add to wishlist
-      await prisma.wishlist.create({
+      await prisma.wishlistItem.create({
         data: {
-          userId: payload.userId,
+          wishlistId: wishlist.id,
           productId: validatedData.productId,
         },
       });
