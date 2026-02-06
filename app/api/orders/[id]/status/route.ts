@@ -31,18 +31,12 @@ export async function PUT(
       where: { id },
       data: {
         status: validatedData.status,
-        trackingNumber: validatedData.trackingNumber,
         carrier: validatedData.carrier,
         statusHistory: {
           create: {
             status: validatedData.status,
             notes: validatedData.notes,
           },
-        },
-      },
-      include: {
-        statusHistory: {
-          orderBy: { createdAt: 'desc' },
         },
       },
     });
