@@ -168,6 +168,7 @@ model Order {
   address       Address       @relation(fields: [addressId], references: [id])
   items         OrderItem[]
   payments      Payment[]
+  statusHistory OrderStatusHistory[]
 
   @@index([userId])
   @@index([orderNumber])
@@ -253,4 +254,18 @@ model FCMToken {
 
   @@index([userId])
   @@map("fcm_tokens")
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(uuid())
+  orderId   String
+  status    OrderStatus
+  notes     String?
+  createdAt DateTime @default(now())
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_status_history")
 }
