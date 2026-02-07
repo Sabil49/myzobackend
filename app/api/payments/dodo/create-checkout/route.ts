@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Dodo configuration
+    const DODO_API_BASE = process.env.DODO_API_BASE || 'https://api.test.dodopayments.com';
     const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
     const DODO_API_KEY = process.env.DODO_API_KEY;
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     // Call Dodo API to create checkout with proper amount
     if (DODO_API_KEY) {
-      const apiUrl = `${DODO_CHECKOUT_BASE}/api/v1/checkout`;
+      const apiUrl = `${DODO_API_BASE}/api/payment-links`;
 
       const payload = {
         amount: amountCents,
@@ -103,12 +104,14 @@ export async function POST(request: NextRequest) {
 
       if (!dodoResponse.ok) {
         const errorBody = await dodoResponse.text().catch(() => null);
-        console.error('Dodo API error', dodoResponse.status, errorBody);
-        return NextResponse.json({ error: 'Failed to create Dodo checkout' }, { status: 502 });
+        console.error('Dodo API error', dodoResponse.status, 'Response:', errorBody?.substring(0, 500));
+        return NextResponse.json({ error: 'Failed to create Dodo checkout', status: dodoResponse.status, details: errorBody?.substring(0, 200) }, { status: 502 });
       }
 
       const dodoData = await dodoResponse.json();
+      console.log('Dodo API response:', dodoData);
       if (dodoData?.checkout_url) checkoutUrl = dodoData.checkout_url;
+      if (dodoData?.url) checkoutUrl = dodoData.url; // Alternative field name
 
       // Persist Dodo payment id to order
       try {
