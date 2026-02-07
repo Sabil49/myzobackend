@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       zipcode: '00000',
     };
 
-    // Prepare customer information
+    // Prepare customer information (simple format - just email and name)
     const customerEmail = order.userEmail || order.user?.email || '';
     const customerName = order.userName || `${order.user?.firstName ?? ''} ${order.user?.lastName ?? ''}`.trim();
 
@@ -97,17 +97,16 @@ export async function POST(request: NextRequest) {
       quantity: 1,
     }];
 
-    // Call Dodo Checkout Sessions API
+    // Call Dodo Checkouts API
     const apiUrl = `${DODO_API_BASE}/checkouts`;
     
     const payload = {
-      billing,
+      product_cart: productCart,
       customer: {
         email: customerEmail,
         name: customerName,
-        phone_number: 7777777777, // Dodo requires a phone number, using dummy value
       },
-      product_cart: productCart,
+      billing,
       return_url: returnUrl,
       metadata: {
         order_id: order.id,
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    console.log('[DODO] Calling Checkout Sessions API:', apiUrl);
+    console.log('[DODO] Calling Checkouts API:', apiUrl);
     console.log('[DODO] Environment:', DODO_ENVIRONMENT);
     console.log('[DODO] Request payload:', JSON.stringify(payload, null, 2));
 
@@ -146,7 +145,7 @@ export async function POST(request: NextRequest) {
       const errorBody = await dodoResponse.text().catch(() => null);
       console.error('[DODO] Error response body:', errorBody?.substring(0, 1000));
       return NextResponse.json({
-        error: 'Failed to create Dodo checkout session',
+        error: 'Failed to create Dodo checkout',
         status: dodoResponse.status,
         apiUrl,
         details: errorBody?.substring(0, 500),
