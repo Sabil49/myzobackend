@@ -35,60 +35,49 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = verifyPaymentSchema.parse(body);
 
-    // Find payment and verify it belongs to user's order
-    const payment = await prisma.payment.findFirst({
+    // Find order by Dodo payment ID
+    const order = await prisma.order.findFirst({
       where: {
-        id: validatedData.paymentId,
-        providerPaymentId: validatedData.providerPaymentId,
-        provider: 'DODO',
-      },
-      include: {
-        order: true,
+        razorpayOrderId: validatedData.providerPaymentId,
       },
     });
 
-    if (!payment) {
-      return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    if (payment.order.userId !== payload.userId) {
-      return NextResponse.json({ error: 'Unauthorized access to payment' }, { status: 403 });
+    // Verify order belongs to authenticated user
+    if (order.userId !== payload.userId) {
+      return NextResponse.json({ error: 'Unauthorized access to order' }, { status: 403 });
     }
 
-    // Update payment status
+    // Update order payment status
     const newPaymentStatus = validatedData.status === 'success' ? 'PAID' : 'FAILED';
-    const updatedPayment = await prisma.payment.update({
-      where: { id: payment.id },
+    const newOrderStatus = validatedData.status === 'success' ? 'CONFIRMED' : 'PLACED';
+    
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
       data: {
-        status: newPaymentStatus,
-        providerTransactionId: validatedData.transactionId,
-        paidAt: validatedData.status === 'success' ? new Date() : null,
+        status: newOrderStatus,
+        paymentStatus: newPaymentStatus,
+        razorpayPaymentId: validatedData.transactionId || undefined,
       },
     });
 
-    // Update order status if payment successful
-    if (validatedData.status === 'success') {
-      await prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          status: 'CONFIRMED',
-          paymentStatus: 'PAID',
-        },
-      });
-    } else {
-      await prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          paymentStatus: 'FAILED',
-        },
-      });
-    }
+    // Add status history entry
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        status: newOrderStatus as any,
+        notes: `Payment verification: ${validatedData.status === 'success' ? 'succeeded' : 'failed'} (Transaction: ${validatedData.transactionId || 'N/A'})`,
+      },
+    });
 
     return NextResponse.json({
       payment: {
-        id: updatedPayment.id,
-        status: updatedPayment.status,
-        orderId: updatedPayment.orderId,
+        id: validatedData.providerPaymentId,
+        status: newPaymentStatus,
+        orderId: order.id,
       },
       message: validatedData.status === 'success' 
         ? 'Payment verified successfully' 

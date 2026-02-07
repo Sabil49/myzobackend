@@ -17,35 +17,37 @@ export async function POST(request: NextRequest) {
     const { payment_id, status, transaction_id, event_type } = body;
 
     if (event_type === 'payment.completed' || event_type === 'payment.failed') {
-      const payment = await prisma.payment.findFirst({
+      // Find order by Dodo payment ID (stored in razorpayOrderId field)
+      const order = await prisma.order.findFirst({
         where: {
-          providerPaymentId: payment_id,
-          provider: 'DODO',
+          razorpayOrderId: payment_id,
         },
       });
 
-      if (!payment) {
-        return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+      if (!order) {
+        console.warn('Order not found for payment:', payment_id);
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
       }
 
-      const newStatus = status === 'completed' ? 'PAID' : 'FAILED';
-
-      // Update payment
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: newStatus,
-          providerTransactionId: transaction_id,
-          paidAt: status === 'completed' ? new Date() : null,
-        },
-      });
+      const newPaymentStatus = status === 'completed' ? 'PAID' : 'FAILED';
+      const newOrderStatus = status === 'completed' ? 'CONFIRMED' : 'PLACED';
 
       // Update order
       await prisma.order.update({
-        where: { id: payment.orderId },
+        where: { id: order.id },
         data: {
-          status: status === 'completed' ? 'CONFIRMED' : 'PLACED',
-          paymentStatus: newStatus,
+          status: newOrderStatus,
+          paymentStatus: newPaymentStatus,
+          razorpayPaymentId: transaction_id || undefined, // Store transaction ID
+        },
+      });
+
+      // Add status history entry
+      await prisma.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: newOrderStatus as any,
+          notes: `Dodo payment ${status === 'completed' ? 'succeeded' : 'failed'} (ID: ${payment_id})`,
         },
       });
     }

@@ -47,44 +47,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    // Check if payment already exists for this order
-    const existingPayment = await prisma.payment.findFirst({
-      where: {
-        orderId: validatedData.orderId,
-        provider: 'DODO',
-      },
-    });
-
-    if (existingPayment && existingPayment.status === 'PAID') {
+    // Check if order is already paid
+    if (order.paymentStatus === 'PAID') {
       return NextResponse.json(
         { error: 'Order already paid' },
         { status: 400 }
       );
     }
 
-    // Create payment record
-    const payment = await prisma.payment.create({
+    // Generate Dodo payment ID
+    const dodoPaymentId = `dodo_${Date.now()}_${order.id}`;
+
+    // Update order with payment details (store Dodo ID in razorpayOrderId field for now)
+    await prisma.order.update({
+      where: { id: validatedData.orderId },
       data: {
-        orderId: validatedData.orderId,
-        amount: validatedData.amount,
-        currency: validatedData.currency,
-        provider: 'DODO',
-        status: 'PENDING',
-        providerPaymentId: `dodo_${Date.now()}_${order.id}`,
+        razorpayOrderId: dodoPaymentId,
       },
     });
 
     // Generate Dodo payment URL (mock implementation)
-    const dodoPaymentUrl = `https://pay.dodo.com/checkout?payment_id=${payment.providerPaymentId}&amount=${validatedData.amount}&currency=${validatedData.currency}&return_url=${validatedData.returnUrl || ''}`;
+    const dodoPaymentUrl = `https://pay.dodo.com/checkout?payment_id=${dodoPaymentId}&amount=${validatedData.amount}&currency=${validatedData.currency}&return_url=${validatedData.returnUrl || ''}`;
 
     return NextResponse.json({
       payment: {
-        id: payment.id,
+        id: dodoPaymentId,
         paymentUrl: dodoPaymentUrl,
-        providerPaymentId: payment.providerPaymentId,
-        amount: payment.amount,
-        currency: payment.currency,
-        status: payment.status,
+        providerPaymentId: dodoPaymentId,
+        amount: validatedData.amount,
+        currency: validatedData.currency,
+        status: 'PENDING',
       },
     });
   } catch (error) {
