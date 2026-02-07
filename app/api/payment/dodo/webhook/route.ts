@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       await prisma.orderStatusHistory.create({
         data: {
           orderId: order.id,
-          status: newOrderStatus as any,
+          status: newOrderStatus,
           notes: `Dodo payment ${status === 'completed' ? 'succeeded' : 'failed'} (ID: ${payment_id})`,
         },
       });

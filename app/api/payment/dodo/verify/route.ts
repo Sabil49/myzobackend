@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const newPaymentStatus = validatedData.status === 'success' ? 'PAID' : 'FAILED';
     const newOrderStatus = validatedData.status === 'success' ? 'CONFIRMED' : 'PLACED';
     
-    const updatedOrder = await prisma.order.update({
+    await prisma.order.update({
       where: { id: order.id },
       data: {
         status: newOrderStatus,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     await prisma.orderStatusHistory.create({
       data: {
         orderId: order.id,
-        status: newOrderStatus as any,
+        status: newOrderStatus,
         notes: `Payment verification: ${validatedData.status === 'success' ? 'succeeded' : 'failed'} (Transaction: ${validatedData.transactionId || 'N/A'})`,
       },
     });

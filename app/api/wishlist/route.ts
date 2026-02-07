@@ -1,4 +1,4 @@
-// app/api/products/categories/route.ts
+// app/api/wishlist/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
@@ -12,43 +12,36 @@ const toggleWishlistSchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    let payload;
+    try {
+      payload = verifyAccessToken(token);
+    } catch (err) {
+      console.error('Token verification failed:', err);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = verifyAccessToken(token);
-
-    const wishlist = await prisma.wishlist.findUnique({
+    const wishlistItems = await prisma.wishlist.findMany({
       where: { userId: payload.userId },
       include: {
-        items: {
+        product: {
           select: {
             id: true,
-            createdAt: true,
-            product: {
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                images: true,
-                stockQuantity: true,
-              },
-            },
+            name: true,
+            price: true,
+            images: true,
+            stock: true,
           },
-          orderBy: { createdAt: 'desc' },
         },
       },
+      orderBy: { createdAt: 'desc' },
     });
-
-    const wishlistItems = wishlist?.items || [];
 
     return NextResponse.json({ wishlistItems });
   } catch (error) {
     console.error('Wishlist fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch wishlist' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch wishlist' }, { status: 500 });
   }
 }
 
@@ -56,57 +49,39 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    let payload;
+    try {
+      payload = verifyAccessToken(token);
+    } catch (err) {
+      console.error('Token verification failed:', err);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = verifyAccessToken(token);
     const body = await request.json();
     const validatedData = toggleWishlistSchema.parse(body);
 
-    // Get or create wishlist for user
-    let wishlist = await prisma.wishlist.findUnique({
-      where: { userId: payload.userId },
-    });
-
-    if (!wishlist) {
-      wishlist = await prisma.wishlist.create({
-        data: { userId: payload.userId },
-      });
-    }
-
-    // Check if product already in wishlist
-    const existing = await prisma.wishlistItem.findFirst({
+    // Check if item exists (composite unique key userId_productId)
+    const existing = await prisma.wishlist.findUnique({
       where: {
-        wishlistId: wishlist.id,
-        productId: validatedData.productId,
+        userId_productId: {
+          userId: payload.userId,
+          productId: validatedData.productId,
+        },
       },
     });
 
     if (existing) {
-      // Remove from wishlist
-      await prisma.wishlistItem.delete({
-        where: { id: existing.id },
-      });
+      await prisma.wishlist.delete({ where: { id: existing.id } });
       return NextResponse.json({ message: 'Removed from wishlist' });
-    } else {
-      // Add to wishlist
-      await prisma.wishlistItem.create({
-        data: {
-          wishlistId: wishlist.id,
-          productId: validatedData.productId,
-        },
-      });
-      return NextResponse.json({ message: 'Added to wishlist' });
     }
+
+    await prisma.wishlist.create({ data: { userId: payload.userId, productId: validatedData.productId } });
+    return NextResponse.json({ message: 'Added to wishlist' });
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 });
-    }
+    if (error instanceof z.ZodError) return NextResponse.json({ error: error.errors }, { status: 400 });
     console.error('Wishlist toggle error:', error);
-    return NextResponse.json(
-      { error: 'Failed to toggle wishlist' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to toggle wishlist' }, { status: 500 });
   }
 }
