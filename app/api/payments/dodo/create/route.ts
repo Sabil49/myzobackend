@@ -6,8 +6,7 @@ import { z } from 'zod';
 
 const dodoPaymentSchema = z.object({
   orderId: z.string().cuid(),
-  amount: z.number().min(1),
-  currency: z.string().length(3).default('USD'),
+  currency: z.string().length(3).default('USD').optional(),
   customerEmail: z.string().email().optional(),
 });
 
@@ -62,53 +61,80 @@ export async function POST(request: NextRequest) {
         paymentId: order.paymentIntentId ?? undefined,
       }, { status: 400 });
     }
-    // TODO: Integrate with actual Dodo Payments API
-    // For now, return a mock response with the checkout URL
-    
-    const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI';
-    const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
-    const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
-    
-    const returnUrl = `${BASE_URL}/api/payments/dodo/return?orderId=${order.id}`;
-    const checkoutUrl = `${DODO_CHECKOUT_BASE}/buy/${DODO_PRODUCT_ID}?quantity=1&redirect_url=${encodeURIComponent(returnUrl)}`;
+    // Derive amount from order snapshot (server source of truth)
+    const totalNumber = typeof order.total === 'object' && 'toNumber' in order.total ? order.total.toNumber() : Number(order.total);
+    const amountCents = Math.round(totalNumber * 100);
 
-    // Actual Dodo API integration would look like this:
-    /*
-    const dodoResponse = await fetch(`${DODO_CHECKOUT_BASE}/api/v1/payments`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DODO_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: validatedData.amount,
-        currency: validatedData.currency,
-        customer_email: validatedData.customerEmail || order.user.email,
-        product_id: DODO_PRODUCT_ID,
+    if (!amountCents || amountCents <= 0) {
+      return NextResponse.json({ error: 'Invalid order amount' }, { status: 400 });
+    }
+
+    const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
+    const DODO_API_KEY = process.env.DODO_API_KEY;
+    const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
+
+    if (!DODO_API_KEY) {
+      console.warn('DODO_API_KEY not set; falling back to simple checkout URL');
+    }
+
+    const returnUrl = `${BASE_URL}/api/payments/dodo/return?orderId=${order.id}`;
+
+    let checkoutUrl = `${DODO_CHECKOUT_BASE}/buy/${process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI'}?quantity=1&redirect_url=${encodeURIComponent(returnUrl)}`;
+
+    // If API key provided, create real checkout via Dodo API
+    if (DODO_API_KEY) {
+      const apiUrl = `${DODO_CHECKOUT_BASE}/api/v1/checkout`;
+
+      const payload = {
+        amount: amountCents,
+        currency: validatedData.currency || 'USD',
+        customer_email: validatedData.customerEmail || order.userEmail || order.user?.email,
+        customer_name: order.userName || `${order.user?.firstName ?? ''} ${order.user?.lastName ?? ''}`.trim(),
         metadata: {
           order_id: order.id,
           order_number: order.orderNumber,
           user_id: order.userId,
         },
         return_url: returnUrl,
-      }),
-    });
+        webhook_url: `${BASE_URL}/api/payments/dodo/webhook`,
+      };
 
-    if (!dodoResponse.ok) {
-      throw new Error('Failed to create Dodo payment');
+      const dodoResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${DODO_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!dodoResponse.ok) {
+        const errorBody = await dodoResponse.text().catch(() => null);
+        console.error('Dodo API error', dodoResponse.status, errorBody);
+        return NextResponse.json({ error: 'Failed to create Dodo checkout' }, { status: 502 });
+      }
+
+      const dodoData = await dodoResponse.json();
+      if (dodoData?.checkout_url) checkoutUrl = dodoData.checkout_url;
+
+      // Persist Dodo payment id to order (re-using razorpayOrderId field)
+      try {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { razorpayOrderId: dodoData?.id ?? undefined },
+        });
+      } catch (e) {
+        console.warn('Failed to persist Dodo id on order', e);
+      }
     }
-
-    const dodoData = await dodoResponse.json();
-    checkoutUrl = dodoData.checkout_url;
-    */
 
     return NextResponse.json({
       success: true,
       checkoutUrl,
       orderId: order.id,
       orderNumber: order.orderNumber,
-      amount: validatedData.amount,
-      currency: validatedData.currency,
+      amount: totalNumber,
+      currency: validatedData.currency || 'USD',
     });
 
   } catch (error) {
