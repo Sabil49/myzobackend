@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
             email: true,
             firstName: true,
             lastName: true,
-            phoneNumber: true,
           },
         },
         address: true,
@@ -103,7 +102,7 @@ export async function POST(request: NextRequest) {
       customer: {
         email: customerEmail,
         name: customerName,
-        phone_number: order.user?.phoneNumber || undefined,
+        phone_number: 7777777777, // Dodo API requires a phone number, using a dummy value
       },
       product_cart: productCart,
       return_url: returnUrl,
