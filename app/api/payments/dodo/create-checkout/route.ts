@@ -24,7 +24,6 @@ export async function POST(request: NextRequest) {
             lastName: true,
           },
         },
-        address: true,
       },
     });
 
