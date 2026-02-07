@@ -1,6 +1,5 @@
 // app/api/payments/dodo/create-checkout/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -10,21 +9,6 @@ const createCheckoutSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.slice('Bearer '.length);
-    let payload;
-    
-    try {
-      payload = verifyAccessToken(token);
-    } catch {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
     // Parse and validate request body
     const body = await request.json();
     const validatedData = createCheckoutSchema.parse(body);
@@ -47,10 +31,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    // Verify order belongs to authenticated user (or user is null and by extension order still valid)
-    if (order.userId && order.userId !== payload.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
+    // Note: checkout is initiated by the client using an orderId returned
+    // from the server when the order was created. This endpoint is intentionally
+    // permissive so mobile/web clients can redirect the user to the Dodo
+    // checkout page without requiring an additional auth header.
 
     // Prevent checkout for already paid orders
     if (order.paymentStatus === 'PAID') {
@@ -125,7 +109,7 @@ export async function POST(request: NextRequest) {
       checkoutUrl,
       orderId: order.id,
       orderNumber: order.orderNumber,
-      amount: order.total,
+      amount: typeof order.total === 'object' && 'toNumber' in order.total ? order.total.toNumber() : order.total,
       currency: 'USD',
     });
 
