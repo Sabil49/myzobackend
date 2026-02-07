@@ -90,8 +90,18 @@ DROP INDEX "users_email_idx";
 ALTER TABLE "addresses" ALTER COLUMN "country" SET DEFAULT 'USA';
 
 -- AlterTable
-ALTER TABLE "cart_items" DROP COLUMN "cartId",
-ADD COLUMN     "userId" TEXT NOT NULL;
+ALTER TABLE "cart_items" ADD COLUMN "userId" TEXT;
+
+-- Populate userId from carts table
+UPDATE "cart_items" SET "userId" = (
+  SELECT "userId" FROM "carts" WHERE "carts"."id" = "cart_items"."cartId"
+);
+
+-- Set userId as NOT NULL after population
+ALTER TABLE "cart_items" ALTER COLUMN "userId" SET NOT NULL;
+
+-- Drop cartId column
+ALTER TABLE "cart_items" DROP COLUMN "cartId";
 
 -- AlterTable
 ALTER TABLE "categories" DROP COLUMN "isActive",
@@ -111,31 +121,109 @@ ADD COLUMN     "razorpayOrderId" TEXT,
 ADD COLUMN     "razorpayPaymentId" TEXT,
 ADD COLUMN     "shippingCost" DECIMAL(10,2) NOT NULL DEFAULT 0,
 ADD COLUMN     "trackingNumber" TEXT,
-ALTER COLUMN "userId" DROP NOT NULL,
+ADD COLUMN     "userEmail" TEXT,
+ADD COLUMN     "userName" TEXT,
 ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(10,2),
 ALTER COLUMN "tax" SET DEFAULT 0,
 ALTER COLUMN "tax" SET DATA TYPE DECIMAL(10,2),
 ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2),
-DROP COLUMN "paymentMethod",
-ADD COLUMN     "paymentMethod" "PaymentMethod" NOT NULL;
+ADD COLUMN     "paymentMethod_new" "PaymentMethod";
 
--- AlterTable
+-- Populate audit snapshot fields from users table to preserve order attribution
+UPDATE "orders" 
+SET "userEmail" = u."email", 
+    "userName" = CONCAT(u."firstName", ' ', u."lastName")
+FROM "users" u
+WHERE "orders"."userId" = u."id";
+
+-- Populate paymentMethod_new by mapping existing values
+UPDATE "orders" SET "paymentMethod_new" = CASE
+  WHEN "paymentMethod" = 'STRIPE' THEN 'STRIPE'::text::"PaymentMethod"
+  WHEN "paymentMethod" = 'RAZORPAY' THEN 'RAZORPAY'::text::"PaymentMethod"
+  WHEN "paymentMethod" = 'DODO' THEN 'DODO'::text::"PaymentMethod"
+  ELSE 'STRIPE'::text::"PaymentMethod"
+END;
+
+-- Set the new column as NOT NULL
+ALTER TABLE "orders" ALTER COLUMN "paymentMethod_new" SET NOT NULL;
+
+-- Drop old column and rename new one
+ALTER TABLE "orders" DROP COLUMN "paymentMethod";
+ALTER TABLE "orders" RENAME COLUMN "paymentMethod_new" TO "paymentMethod";
+
+-- AlterTable - Add new columns (nullable initially for safe migration)
 ALTER TABLE "products" DROP COLUMN "compareAtPrice",
 DROP COLUMN "isAvailable",
 DROP COLUMN "slug",
 DROP COLUMN "stockQuantity",
-ADD COLUMN     "careInstructions" TEXT NOT NULL,
-ADD COLUMN     "dimensions" TEXT NOT NULL,
+ADD COLUMN     "careInstructions" TEXT,
+ADD COLUMN     "dimensions" TEXT,
 ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
-ADD COLUMN     "isWishlisted" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "materials" TEXT[],
 ADD COLUMN     "stock" INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN     "styleCode" TEXT NOT NULL,
+ADD COLUMN     "styleCode" TEXT,
 ALTER COLUMN "price" SET DATA TYPE DECIMAL(10,2);
+
+-- Backfill careInstructions and dimensions with empty string for existing rows
+UPDATE "products" SET "careInstructions" = '' WHERE "careInstructions" IS NULL;
+UPDATE "products" SET "dimensions" = '' WHERE "dimensions" IS NULL;
+
+-- Backfill styleCode with a generated value (id-based) for existing rows to ensure uniqueness
+UPDATE "products" SET "styleCode" = "id" WHERE "styleCode" IS NULL;
+
+-- Set careInstructions, dimensions, and styleCode as NOT NULL after backfill
+ALTER TABLE "products" ALTER COLUMN "careInstructions" SET NOT NULL;
+ALTER TABLE "products" ALTER COLUMN "dimensions" SET NOT NULL;
+ALTER TABLE "products" ALTER COLUMN "styleCode" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "users" DROP COLUMN "role",
 ADD COLUMN     "role" "Role" NOT NULL DEFAULT 'CUSTOMER';
+
+-- ====== DATA MIGRATION & ARCHIVAL ======
+
+-- Create archival table for payments to preserve transaction history
+CREATE TABLE "payment_history" (
+    "id" TEXT NOT NULL,
+    "orderId" TEXT NOT NULL,
+    "amount" DOUBLE PRECISION NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'USD',
+    "provider" TEXT NOT NULL,
+    "providerPaymentId" TEXT NOT NULL,
+    "providerTransactionId" TEXT,
+    "status" TEXT NOT NULL,
+    "paidAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "archivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "payment_history_pkey" PRIMARY KEY ("id")
+);
+
+-- Create indexes on archived payment data
+CREATE INDEX "payment_history_orderId_idx" ON "payment_history"("orderId");
+CREATE INDEX "payment_history_providerPaymentId_idx" ON "payment_history"("providerPaymentId");
+CREATE INDEX "payment_history_createdAt_idx" ON "payment_history"("createdAt");
+
+-- Archive all payments before dropping the table
+INSERT INTO "payment_history" ("id", "orderId", "amount", "currency", "provider", "providerPaymentId", "providerTransactionId", "status", "paidAt", "createdAt", "updatedAt")
+SELECT "id", "orderId", "amount", "currency", "provider", "providerPaymentId", "providerTransactionId", "status"::"text", "paidAt", "createdAt", "updatedAt"
+FROM "payments";
+
+-- Verify archival integrity: ensure all payments were copied
+DO $$
+DECLARE
+  orig_count BIGINT;
+  archived_count BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO orig_count FROM "payments";
+  SELECT COUNT(*) INTO archived_count FROM "payment_history";
+  IF orig_count != archived_count THEN
+    RAISE EXCEPTION 'Payment archival failed: original % records, archived % records', orig_count, archived_count;
+  END IF;
+END $$;
+
+-- ====== DROP TABLES ======
 
 -- DropTable
 DROP TABLE "carts";
@@ -225,4 +313,4 @@ ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_userId_fkey" FOREIGN KEY ("u
 ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

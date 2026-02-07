@@ -23,6 +23,7 @@ model User {
   wishlist      Wishlist[]
   cart          CartItem[]
   fcmTokens     FCMToken[]
+  refreshTokenRevocations RefreshTokenRevocation[]
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -95,7 +96,6 @@ model Product {
   isFeatured    Boolean   @default(false)
   
   wishlistedBy  Wishlist[]
-  isWishlisted  Boolean   @default(false)
   cartItems     CartItem[]
   orderItems    OrderItem[]
   
@@ -141,8 +141,11 @@ model Order {
   id                String      @id @default(cuid())
   orderNumber       String      @unique
   
-  userId            String?
-  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  userEmail         String?     // Snapshot of user email at order time for audit trail
+  userName          String?     // Snapshot of user name at order time for audit trail
   
   addressId         String
   shippingAddress   Address     @relation(fields: [addressId], references: [id], onDelete: Restrict)
@@ -203,7 +206,7 @@ model OrderItem {
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   productId     String
-  product       Product   @relation(fields: [productId], references: [id])
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
   
   quantity      Int
   price         Decimal   @db.Decimal(10, 2) // Price at time of purchase
@@ -246,13 +249,12 @@ model FCMToken {
 model RefreshTokenRevocation {
   id            String    @id @default(cuid())
   userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash     String    @unique // Hash of the refresh token
   
-  createdAt     DateTime  @default(now())
   revokedAt     DateTime  @default(now())
   
   @@index([userId])
   @@index([revokedAt])
   @@map("refresh_token_revocations")
 }
-

@@ -31,15 +31,14 @@ export async function PUT(
       where: { id },
       data: {
         status: validatedData.status,
-        trackingNumber: validatedData.trackingNumber,
-        carrier: validatedData.carrier,
+        ...(validatedData.trackingNumber !== undefined && { trackingNumber: validatedData.trackingNumber }),
+        ...(validatedData.carrier !== undefined && { carrier: validatedData.carrier }),
         statusHistory: {
           create: {
             status: validatedData.status,
             notes: validatedData.notes,
           },
-        },
-      },
+        },      },
       include: {
         statusHistory: {
           orderBy: { createdAt: 'desc' },

@@ -143,15 +143,13 @@ export async function POST(request: NextRequest) {
       // Generate order number with crypto-strong UUID
       const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
-      // Map payment method to uppercase for Prisma enum
       const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY' | 'DODO'> = {
        'stripe': 'STRIPE',
        'razorpay': 'RAZORPAY',
-       'dodo': 'DODO',    // ← ADD THIS
+       'dodo': 'DODO',
       };
-
       // Create order
-      return tx.order.create({
+      const createdOrder = await tx.order.create({
         data: {
           orderNumber,
           userId: payload.userId,
@@ -182,15 +180,17 @@ export async function POST(request: NextRequest) {
           shippingAddress: true,
         },
       });
-    });
 
-    // Clear user's cart
-    await prisma.cartItem.deleteMany({
-      where: { userId: payload.userId },
+      // Clear user's cart within transaction
+      await tx.cartItem.deleteMany({
+        where: { userId: payload.userId },
+      });
+  
+      return createdOrder;
     });
-
-    return NextResponse.json({ order }, { status: 201 });
-  } catch (error: unknown) {
+  
+      return NextResponse.json({ order }, { status: 201 });
+    } catch (error: unknown) {
     if (typeof error === 'object' && error !== null && 'message' in error) {
       const message = (error as { message?: string }).message || '';
       if (message.includes('Insufficient stock') || message.includes('Product') && message.includes('not found')) {

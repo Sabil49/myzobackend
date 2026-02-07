@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
     let payload;
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
-      console.error('Token verification failed:', error);
+    } catch {
+      console.error('Token verification failed');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

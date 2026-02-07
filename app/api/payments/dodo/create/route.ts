@@ -58,10 +58,10 @@ export async function POST(request: NextRequest) {
     if (order.paymentStatus === 'PAID') {
       return NextResponse.json({ 
         error: 'Order has already been paid',
-        paymentId: order.paymentIntentId 
+        orderId: order.id,
+        paymentId: order.paymentIntentId ?? undefined,
       }, { status: 400 });
     }
-
     // TODO: Integrate with actual Dodo Payments API
     // For now, return a mock response with the checkout URL
     
