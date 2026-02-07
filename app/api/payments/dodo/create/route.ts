@@ -100,25 +100,39 @@ export async function POST(request: NextRequest) {
         webhook_url: `${BASE_URL}/api/payments/dodo/webhook`,
       };
 
-      console.log('Calling Dodo API:', apiUrl, 'with payload:', payload);
-      
-      const dodoResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${DODO_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      console.log('[DODO] Calling API:', apiUrl);
+      console.log('[DODO] Request payload:', JSON.stringify(payload, null, 2));
+
+      let dodoResponse;
+      try {
+        dodoResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${DODO_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      } catch (fetchError) {
+        console.error('[DODO] Fetch error:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('[DODO] Response status:', dodoResponse.status);
 
       if (!dodoResponse.ok) {
         const errorBody = await dodoResponse.text().catch(() => null);
-        console.error('Dodo API error', dodoResponse.status, 'Response:', errorBody?.substring(0, 500));
-        return NextResponse.json({ error: 'Failed to create Dodo checkout', status: dodoResponse.status, details: errorBody?.substring(0, 200) }, { status: 502 });
+        console.error('[DODO] Error response body:', errorBody?.substring(0, 1000));
+        return NextResponse.json({
+          error: 'Failed to create Dodo checkout',
+          status: dodoResponse.status,
+          apiUrl,
+          details: errorBody?.substring(0, 500),
+        }, { status: 502 });
       }
 
       const dodoData = await dodoResponse.json();
-      console.log('Dodo API response:', dodoData);
+      console.log('[DODO] API response:', JSON.stringify(dodoData, null, 2));
       if (dodoData?.checkout_url) checkoutUrl = dodoData.checkout_url;
       if (dodoData?.url) checkoutUrl = dodoData.url; // Alternative field name
 
