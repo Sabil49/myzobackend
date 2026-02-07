@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Dodo configuration
-    const DODO_API_BASE = process.env.DODO_API_BASE || 'https://api.dodopayments.com';
+    const DODO_API_BASE = process.env.DODO_API_BASE || 'https://checkout.dodopayments.com';
     const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
     const DODO_API_KEY = process.env.DODO_API_KEY;
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
