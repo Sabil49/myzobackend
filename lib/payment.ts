@@ -11,3 +11,4 @@ export const dodoPaymentSchema = z.object({
 });
 
 export type DodoPaymentInput = z.infer<typeof dodoPaymentSchema>;
+

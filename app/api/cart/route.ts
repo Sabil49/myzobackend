@@ -4,13 +4,26 @@ import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
 import { z } from 'zod';
 
-const MAX_ITEM_QUANTITY = 10;
+const MAX_ITEM_QUANTITY = 999; // Maximum quantity per cart item
 
-const addToCartSchema = z.object({
-  productId: z.string().uuid(),
-  quantity: z.number().int().min(1).max(MAX_ITEM_QUANTITY),
+// Custom error class for cart validation failures
+class CartValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CartValidationError';
+  }
+}
+
+const cartItemSchema = z.object({
+  productId: z.string().cuid(),
+  quantity: z.number().int().positive(),
 });
 
+const syncCartSchema = z.object({
+  items: z.array(cartItemSchema),
+});
+
+// GET /api/cart - Get user's cart
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -19,65 +32,34 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
+
     let payload;
-    
     try {
       payload = verifyAccessToken(token);
     } catch (error) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+      console.error('Token verification failed:', error);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!payload?.userId) {
-      return NextResponse.json({ error: 'Invalid token payload' }, { status: 401 });
-    }
-
-    let cart = await prisma.cart.findUnique({
+    const cartItems = await prisma.cartItem.findMany({
       where: { userId: payload.userId },
       include: {
-        items: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                images: true,
-                stockQuantity: true,
-                isAvailable: true,
-              },
-            },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            images: true,
+            styleCode: true,
+            stock: true,
           },
         },
       },
     });
 
-    if (!cart) {
-      cart = await prisma.cart.create({
-        data: {
-          userId: payload.userId,
-        },
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  price: true,
-                  images: true,
-                  stockQuantity: true,
-                  isAvailable: true,
-                },
-              },
-            },
-          },
-        },
-      });
-    }
-
-    return NextResponse.json({ cart });
+    return NextResponse.json({ cartItems });
   } catch (error) {
-    console.error('Get cart error:', error);
+    console.error('Cart fetch error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch cart' },
       { status: 500 }
@@ -85,6 +67,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST /api/cart - Sync cart from client
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -93,132 +76,99 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
+
     let payload;
-    
     try {
       payload = verifyAccessToken(token);
     } catch (error) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+      console.error('Token verification failed:', error);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!payload?.userId) {
-      return NextResponse.json({ error: 'Invalid token payload' }, { status: 401 });
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('JSON parse error:', error);
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const body = await request.json();
-    const validatedData = addToCartSchema.parse(body);
+    const validatedData = syncCartSchema.parse(body);
 
-    const product = await prisma.product.findUnique({
-      where: { id: validatedData.productId },
-    });
+    // Use transaction for atomicity
+    await prisma.$transaction(async (tx) => {
+      // Delete existing cart items
+      await tx.cartItem.deleteMany({
+        where: { userId: payload.userId },
+      });
 
-    if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
-    }
-
-    if (!product.isAvailable) {
-      return NextResponse.json({ error: 'Product is not available' }, { status: 400 });
-    }
-
-    if (product.stockQuantity < validatedData.quantity) {
-      return NextResponse.json(
-        { error: 'Insufficient stock' },
-        { status: 400 }
+      // Deduplicate items by productId: sum quantities for duplicate entries
+      // Preserves first occurrence of item metadata (productId)
+      const dedupedItems = Array.from(
+        validatedData.items.reduce((map, item) => {
+          const existing = map.get(item.productId);
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            map.set(item.productId, { ...item });
+          }
+          return map;
+        }, new Map<string, typeof validatedData.items[0]>()).values()
       );
-    }
 
-    let cart = await prisma.cart.findUnique({
-      where: { userId: payload.userId },
-    });
-
-    if (!cart) {
-      cart = await prisma.cart.create({
-        data: { userId: payload.userId },
+      // Validate aggregated quantities against MAX_ITEM_QUANTITY and product stock
+      const productIds = dedupedItems.map(item => item.productId);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, stock: true },
       });
-    }
 
-    const existingItem = await prisma.cartItem.findUnique({
-      where: {
-        cartId_productId: {
-          cartId: cart.id,
-          productId: validatedData.productId,
-        },
-      },
-    });
+      const productMap = new Map(products.map(p => [p.id, p.stock]));
 
-    let cartItem;
-    if (existingItem) {
-      const newQuantity = existingItem.quantity + validatedData.quantity;
-      
-      if (newQuantity > MAX_ITEM_QUANTITY) {
-        return NextResponse.json(
-          { error: `Cannot add more than ${MAX_ITEM_QUANTITY} items` },
-          { status: 400 }
-        );
+      for (const item of dedupedItems) {
+        if (item.quantity > MAX_ITEM_QUANTITY) {
+          throw new CartValidationError(`Item quantity for product ${item.productId} exceeds maximum of ${MAX_ITEM_QUANTITY}`);
+        }
+
+        const productStock = productMap.get(item.productId);
+        if (productStock === undefined) {
+          throw new CartValidationError(`Product ${item.productId} not found`);
+        }
+
+        if (item.quantity > productStock) {
+          throw new CartValidationError(`Requested quantity ${item.quantity} exceeds available stock ${productStock} for product ${item.productId}`);
+        }
       }
 
-      if (newQuantity > product.stockQuantity) {
-        return NextResponse.json(
-          { error: 'Insufficient stock' },
-          { status: 400 }
-        );
+      // Create new cart items if any
+      if (dedupedItems.length > 0) {
+        await tx.cartItem.createMany({
+          data: dedupedItems.map((item) => ({
+            userId: payload.userId,
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+        });
       }
+    });
 
-      cartItem = await prisma.cartItem.update({
-        where: { id: existingItem.id },
-        data: { quantity: newQuantity },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              images: true,
-              stockQuantity: true,
-              isAvailable: true,
-            },
-          },
-        },
-      });
-    } else {
-      cartItem = await prisma.cartItem.create({
-        data: {
-          cartId: cart.id,
-          productId: validatedData.productId,
-          quantity: validatedData.quantity,
-        },
-        include: {
-          product: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              images: true,
-              stockQuantity: true,
-              isAvailable: true,
-            },
-          },
-        },
-      });
-    }
-
-    return NextResponse.json({ cartItem });
-  } catch (error) {
+    return NextResponse.json({ message: 'Cart synced successfully' });
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: error.issues }, { status: 400 });
     }
-    
-    console.error('Add to cart error:', error);
+    if (error instanceof CartValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    console.error('Cart sync error:', error);
     return NextResponse.json(
-      { error: 'Failed to add to cart' },
+      { error: 'Failed to sync cart' },
       { status: 500 }
     );
   }
 }
 
+// DELETE /api/cart - Clear cart
 export async function DELETE(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -227,33 +177,22 @@ export async function DELETE(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
+
     let payload;
-    
     try {
       payload = verifyAccessToken(token);
     } catch (error) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-    }
-
-    if (!payload?.userId) {
-      return NextResponse.json({ error: 'Invalid token payload' }, { status: 401 });
-    }
-
-    const cart = await prisma.cart.findUnique({
-      where: { userId: payload.userId },
-    });
-
-    if (!cart) {
-      return NextResponse.json({ message: 'Cart is already empty' });
+      console.error('Token verification failed:', error);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await prisma.cartItem.deleteMany({
-      where: { cartId: cart.id },
+      where: { userId: payload.userId },
     });
 
     return NextResponse.json({ message: 'Cart cleared successfully' });
   } catch (error) {
-    console.error('Clear cart error:', error);
+    console.error('Cart clear error:', error);
     return NextResponse.json(
       { error: 'Failed to clear cart' },
       { status: 500 }

@@ -1,7 +1,9 @@
+// app/api/admin/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
 
+// GET /api/admin/analytics
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -31,14 +33,21 @@ export async function GET(request: NextRequest) {
       topProducts,
       ordersByStatus,
     ] = await Promise.all([
+      // Total orders
       prisma.order.count(),
+
+      // Total revenue
       prisma.order.aggregate({
         where: { paymentStatus: 'PAID' },
         _sum: { total: true },
       }),
+
+      // Total customers
       prisma.user.count({
         where: { role: 'CUSTOMER' },
       }),
+
+      // Recent orders
       prisma.order.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
@@ -51,6 +60,8 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
+
+      // Top products
       prisma.orderItem.groupBy({
         by: ['productId'],
         _sum: { quantity: true },
@@ -58,30 +69,28 @@ export async function GET(request: NextRequest) {
         orderBy: { _sum: { quantity: 'desc' } },
         take: 10,
       }),
+
+      // Orders by status
       prisma.order.groupBy({
         by: ['status'],
         _count: { status: true },
       }),
     ]);
 
-    const productIds = topProducts.map((p: { productId: string; _sum: { quantity: number | null }; _count: { productId: number } }) => p.productId);
+    // Fetch product details for top products
+    const productIds = topProducts.map((p: typeof topProducts[number]) => p.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: {
         id: true,
         name: true,
+        styleCode: true,
         images: true,
       },
     });
 
-    type Product = {
-      id: string;
-      name: string;
-      images: string[];
-    };
-
-    const topProductsWithDetails = topProducts.map((tp: { productId: string; _sum: { quantity: number | null }; _count: { productId: number } }) => {
-      const product = products.find((p: Product) => p.id === tp.productId);
+    const topProductsWithDetails = topProducts.map((tp: typeof topProducts[number]) => {
+      const product = products.find((p: typeof products[number]) => p.id === tp.productId);
       return {
         product: product || { id: tp.productId, name: 'Deleted product', deleted: true },
         totalSold: tp._sum.quantity || 0,
@@ -107,3 +116,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+

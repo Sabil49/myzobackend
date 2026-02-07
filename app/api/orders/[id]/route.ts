@@ -36,9 +36,14 @@ export async function GET(
                 id: true,
                 name: true,
                 images: true,
+                styleCode: true,
               },
             },
           },
+        },
+        shippingAddress: true,
+        statusHistory: {
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -61,3 +66,4 @@ export async function GET(
     );
   }
 }
+

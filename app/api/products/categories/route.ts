@@ -4,32 +4,48 @@ import { prisma } from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth';
 import { z } from 'zod';
 
-const categorySchema = z.object({
-  name: z.string().min(1),
-  slug: z.string().min(1),
-  description: z.string().optional(),
-  imageUrl: z.string().url().optional(),
-  order: z.number().int().default(0),
+const toggleWishlistSchema = z.object({
+  productId: z.string().cuid(),
 });
 
-// GET /api/products/categories
-export async function GET() {
+// GET /api/wishlist - Get user's wishlist
+export async function GET(request: NextRequest) {
   try {
-    const categories = await prisma.category.findMany({
-      orderBy: { order: 'asc' },
+    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const payload = verifyAccessToken(token);
+
+    const wishlistItems = await prisma.wishlist.findMany({
+      where: { userId: payload.userId },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            images: true,
+            styleCode: true,
+            stock: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ categories });
+    return NextResponse.json({ wishlistItems });
   } catch (error) {
-    console.error('Categories fetch error:', error);
+    console.error('Wishlist fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch categories' },
+      { error: 'Failed to fetch wishlist' },
       { status: 500 }
     );
   }
 }
 
-// POST /api/products/categories - Create category (admin only)
+// POST /api/wishlist - Toggle wishlist item
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -38,27 +54,44 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = verifyAccessToken(token);
-    if (payload.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     const body = await request.json();
-    const validatedData = categorySchema.parse(body);
+    const validatedData = toggleWishlistSchema.parse(body);
 
-    const category = await prisma.category.create({
-      data: validatedData,
+    // Check if already in wishlist
+    const existing = await prisma.wishlist.findUnique({
+      where: {
+        userId_productId: {
+          userId: payload.userId,
+          productId: validatedData.productId,
+        },
+      },
     });
 
-    return NextResponse.json({ category }, { status: 201 });
-  } catch (error: unknown) {
-    if (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: string }).name === 'ZodError') {
-      const zodError = error as z.ZodError;
-      return NextResponse.json({ error: zodError.errors }, { status: 400 });
+    if (existing) {
+      // Remove from wishlist
+      await prisma.wishlist.delete({
+        where: { id: existing.id },
+      });
+      return NextResponse.json({ message: 'Removed from wishlist' });
+    } else {
+      // Add to wishlist
+      await prisma.wishlist.create({
+        data: {
+          userId: payload.userId,
+          productId: validatedData.productId,
+        },
+      });
+      return NextResponse.json({ message: 'Added to wishlist' });
     }
-    console.error('Category creation error:', error);
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    console.error('Wishlist toggle error:', error);
     return NextResponse.json(
-      { error: 'Failed to create category' },
+      { error: 'Failed to toggle wishlist' },
       { status: 500 }
     );
   }
 }
+

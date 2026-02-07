@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         where: { id: orderId },
         data: {
           paymentStatus: 'PAID',
+          paymentIntentId: paymentId || undefined,
           status: 'CONFIRMED',
         },
       });
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Extract data from webhook payload
     const orderId = body.metadata?.order_id || body.order_id;
+    const paymentId = body.payment_id || body.id;
     const paymentStatus = body.status || body.payment_status;
 
     if (!orderId) {
@@ -141,10 +143,11 @@ export async function POST(request: NextRequest) {
         where: { id: orderId },
         data: {
           paymentStatus: 'PAID',
+          paymentIntentId: paymentId,
           status: 'CONFIRMED',
         },
       });
-      console.log('Webhook: Order updated to PAID and CONFIRMED for order:', orderId);
+
       await prisma.orderStatusHistory.create({
         data: {
           orderId,
@@ -178,3 +181,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }
+

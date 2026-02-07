@@ -1,44 +1,5 @@
 // lib/auth.ts
 
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-
-// Log the secret lengths (not the actual secrets for security)
-console.log('JWT_SECRET length:', JWT_SECRET?.length);
-console.log('JWT_REFRESH_SECRET length:', JWT_REFRESH_SECRET?.length);
-console.log('JWT_SECRET exists:', !!JWT_SECRET);
-console.log('JWT_REFRESH_SECRET exists:', !!JWT_REFRESH_SECRET);
-
-if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be defined in environment variables');
-}
-
-// Now TypeScript knows these are strings
-const JWT_SECRET_STRING: string = JWT_SECRET;
-const JWT_REFRESH_SECRET_STRING: string = JWT_REFRESH_SECRET;
-
-interface JWTPayload extends JwtPayload {
-  userId: string;
-  email: string;
-  role: 'ADMIN' | 'CUSTOMER';
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
-
-export async function verifyPassword(
-  password: string,
-  hashedPassword: string
-): Promise<boolean> {
-  return bcrypt.compare(password, hashedPassword);
-}
-
-// lib/auth.ts
-
 export function generateAccessToken(payload: JWTPayload): string {
   console.log('[AUTH] Generating access token for user:', payload.userId);
   const token = jwt.sign(payload, JWT_SECRET_STRING, { expiresIn: '24h' }); // Changed from 15m to 24h
@@ -97,3 +58,4 @@ export function verifyRefreshToken(token: string): JWTPayload {
     throw new Error('Invalid or expired refresh token');
   }
 }
+

@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (order.paymentStatus === 'PAID') {
       return NextResponse.json({ 
         error: 'Order has already been paid',
-        orderId: order.id 
+        paymentId: order.paymentIntentId 
       }, { status: 400 });
     }
 
@@ -126,4 +126,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

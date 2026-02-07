@@ -32,3 +32,6 @@ export type OrderStatus =
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 
 export type UserRole = 'CUSTOMER' | 'ADMIN';
+
+
+

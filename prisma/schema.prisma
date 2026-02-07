@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,171 +10,174 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
+  id            String    @id @default(cuid())
   email         String    @unique
   passwordHash  String
   firstName     String
   lastName      String
   phone         String?
-  role          UserRole  @default(CUSTOMER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
+  role          Role      @default(CUSTOMER)
+  
   addresses     Address[]
   orders        Order[]
-  cart          Cart?
-  wishlist      Wishlist?
-  notifications Notification[]
+  wishlist      Wishlist[]
+  cart          CartItem[]
   fcmTokens     FCMToken[]
-
-  @@index([email])
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
   @@map("users")
 }
 
-enum UserRole {
+enum Role {
   CUSTOMER
   ADMIN
 }
 
-model Category {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  slug        String    @unique
-  description String?
-  order       Int       @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  products    Product[]
-
-  @@index([slug])
-  @@map("categories")
-}
-
-model Product {
-  id              String   @id @default(uuid())
-  name            String
-  slug            String?  @unique
-  description     String
-  price           Float
-  compareAtPrice  Float?
-  images          String[]
-  categoryId      String?
-  stockQuantity   Int      @default(0)
-  isAvailable     Boolean  @default(true)
-  isFeatured      Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  category        Category?     @relation(fields: [categoryId], references: [id])
-  cartItems       CartItem[]
-  orderItems      OrderItem[]
-  wishlistItems   WishlistItem[]
-
-  @@index([slug])
-  @@index([categoryId])
-  @@map("products")
-}
-
-model Cart {
-  id        String     @id @default(uuid())
-  userId    String     @unique
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     CartItem[]
-
-  @@map("carts")
-}
-
-model CartItem {
-  id        String   @id @default(uuid())
-  cartId    String
-  productId String
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
-
-  @@unique([cartId, productId])
-  @@map("cart_items")
-}
-
-model Wishlist {
-  id        String         @id @default(uuid())
-  userId    String         @unique
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     WishlistItem[]
-
-  @@map("wishlists")
-}
-
-model WishlistItem {
-  id         String   @id @default(uuid())
-  wishlistId String
-  productId  String
-  createdAt  DateTime @default(now())
-
-  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id])
-
-  @@unique([wishlistId, productId])
-  @@map("wishlist_items")
-}
-
 model Address {
-  id           String   @id @default(uuid())
-  userId       String
-  fullName     String
-  phone        String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  zipCode      String
-  country      String   @default("US")
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders       Order[]
-
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  fullName      String
+  phone         String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  zipCode       String
+  country       String    @default("USA")
+  isDefault     Boolean   @default(false)
+  
+  orders        Order[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
   @@index([userId])
   @@map("addresses")
 }
 
-model Order {
-  id            String        @id @default(uuid())
+model Category {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  slug          String    @unique
+  description   String?
+  imageUrl      String?
+  order         Int       @default(0)
+  
+  products      Product[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("categories")
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  styleCode     String    @unique
+  name          String
+  description   String
+  price         Decimal   @db.Decimal(10, 2)
+  
+  categoryId    String?
+  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  
+  images        String[]  // Array of URLs
+  materials     String[]
+  dimensions    String    // e.g., "30cm x 25cm x 15cm"
+  careInstructions String @db.Text
+  
+  stock         Int       @default(0)
+  isActive      Boolean   @default(true)
+  isFeatured    Boolean   @default(false)
+  
+  wishlistedBy  Wishlist[]
+  isWishlisted  Boolean   @default(false)
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([categoryId, isActive])
+  @@map("products")
+}
+
+model Wishlist {
+  id            String    @id @default(cuid())
   userId        String
-  orderNumber   String        @unique
-  addressId     String
-  subtotal      Float
-  tax           Float
-  shipping      Float         @default(0)
-  total         Float
-  status        OrderStatus   @default(PLACED)
-  paymentStatus PaymentStatus @default(PENDING)
-  paymentMethod String        @default("COD")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  
+  @@unique([userId, productId])
+  @@map("wishlist")
+}
 
-  user          User          @relation(fields: [userId], references: [id])
-  address       Address       @relation(fields: [addressId], references: [id])
-  items         OrderItem[]
-  payments      Payment[]
-  statusHistory OrderStatusHistory[]
+model CartItem {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int       @default(1)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
 
+model Order {
+  id                String      @id @default(cuid())
+  orderNumber       String      @unique
+  
+  userId            String?
+  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  addressId         String
+  shippingAddress   Address     @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  
+  items             OrderItem[]
+  
+  subtotal          Decimal     @db.Decimal(10, 2)
+  shippingCost      Decimal     @db.Decimal(10, 2) @default(0)
+  tax               Decimal     @db.Decimal(10, 2) @default(0)
+  total             Decimal     @db.Decimal(10, 2)
+  
+  status            OrderStatus @default(PLACED)
+  paymentStatus     PaymentStatus @default(PENDING)
+  paymentMethod     PaymentMethod
+  paymentIntentId   String?     // Stripe Payment Intent ID
+  razorpayOrderId   String?     // Razorpay Order ID
+  razorpayPaymentId String?     // Razorpay Payment ID
+  
+  trackingNumber    String?
+  carrier           String?
+  
+  statusHistory     OrderStatusHistory[]
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
   @@index([userId])
-  @@index([orderNumber])
+  @@index([status])
   @@map("orders")
+}
+
+enum PaymentMethod {
+  STRIPE
+  RAZORPAY
+  DODO
 }
 
 enum OrderStatus {
@@ -193,79 +198,61 @@ enum PaymentStatus {
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String
-  productId String
-  quantity  Int
-  price     Float
-  createdAt DateTime @default(now())
-
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
-
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  
+  quantity      Int
+  price         Decimal   @db.Decimal(10, 2) // Price at time of purchase
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([orderId])
   @@map("order_items")
 }
 
-model Payment {
-  id                    String        @id @default(uuid())
-  orderId               String
-  amount                Float
-  currency              String        @default("USD")
-  provider              String
-  providerPaymentId     String        @unique
-  providerTransactionId String?
-  status                PaymentStatus @default(PENDING)
-  paidAt                DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-
-  order                 Order         @relation(fields: [orderId], references: [id])
-
+model OrderStatusHistory {
+  id            String      @id @default(cuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  status        OrderStatus
+  notes         String?
+  
+  createdAt     DateTime    @default(now())
+  
   @@index([orderId])
-  @@index([providerPaymentId])
-  @@map("payments")
-}
-
-model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  title     String
-  body      String
-  data      Json?
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([createdAt])
-  @@map("notifications")
+  @@map("order_status_history")
 }
 
 model FCMToken {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  platform  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token         String    @unique
+  platform      String    // "ios" | "android"
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
   @@index([userId])
   @@map("fcm_tokens")
 }
 
-model OrderStatusHistory {
-  id        String   @id @default(uuid())
-  orderId   String
-  status    OrderStatus
-  notes     String?
-  createdAt DateTime @default(now())
-
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([createdAt])
-  @@map("order_status_history")
+model RefreshTokenRevocation {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique // Hash of the refresh token
+  
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([revokedAt])
+  @@map("refresh_token_revocations")
 }
+

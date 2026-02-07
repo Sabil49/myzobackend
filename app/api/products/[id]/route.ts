@@ -62,9 +62,15 @@ export async function PUT(
 
     // Add fields that are present in validatedData
     if (validatedData.name !== undefined) updateData.name = validatedData.name;
+    if (validatedData.styleCode !== undefined) updateData.styleCode = validatedData.styleCode;
     if (validatedData.description !== undefined) updateData.description = validatedData.description;
     if (validatedData.price !== undefined) updateData.price = validatedData.price;
+    if (validatedData.stock !== undefined) updateData.stock = validatedData.stock;
+    if (validatedData.materials !== undefined) updateData.materials = validatedData.materials;
+    if (validatedData.dimensions !== undefined) updateData.dimensions = validatedData.dimensions;
+    if (validatedData.careInstructions !== undefined) updateData.careInstructions = validatedData.careInstructions;
     if (validatedData.images !== undefined) updateData.images = validatedData.images;
+    if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;
     if (validatedData.isFeatured !== undefined) updateData.isFeatured = validatedData.isFeatured;
 
     // Handle categoryId: connect, disconnect, or leave unchanged
@@ -175,3 +181,4 @@ export async function DELETE(
     );
   }
 }
+

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const limit = isNaN(limitParam) || limitParam < 1 ? 20 : Math.min(limitParam, MAX_LIMIT);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ProductWhereInput = {};
+    const where: Prisma.ProductWhereInput = { isActive: true };
     if (categoryId) where.categoryId = categoryId;
     if (featured === 'true') where.isFeatured = true;
 
@@ -75,11 +75,15 @@ export async function POST(request: NextRequest) {
     // Build the data object - handle categoryId properly
     const productData: Prisma.ProductCreateInput = {
       name: validatedData.name,
+      styleCode: validatedData.styleCode,
       description: validatedData.description,
       price: validatedData.price,
-      stockQuantity: validatedData.stock,
+      stock: validatedData.stock,
+      materials: validatedData.materials,
+      dimensions: validatedData.dimensions,
+      careInstructions: validatedData.careInstructions,
       images: validatedData.images,
-      isAvailable: validatedData.isActive,
+      isActive: validatedData.isActive,
       isFeatured: validatedData.isFeatured,
       // Only connect category if categoryId is provided
       ...(validatedData.categoryId && {
@@ -138,3 +142,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

@@ -21,3 +21,4 @@ export const dodoPaymentSchema = z.object({
   customerEmail: z.string().email(),
   orderId: z.string().cuid(),
 });
+
