@@ -141,11 +141,11 @@ model Order {
   id                String      @id @default(cuid())
   orderNumber       String      @unique
   
-  userId            String
-  user              User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  userId            String?
+  user              User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   
-  userEmail         String?     // Snapshot of user email at order time for audit trail
-  userName          String?     // Snapshot of user name at order time for audit trail
+  userEmail         String      // Snapshot of user email at order time for audit trail
+  userName          String      // Snapshot of user name at order time for audit trail
   
   addressId         String
   shippingAddress   Address     @relation(fields: [addressId], references: [id], onDelete: Restrict)

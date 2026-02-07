@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!address || address.userId !== payload.userId) {
-        throw new Error('Address not found or access denied');
+        throw new Error('BadRequest: Address not found or access denied');
       }
 
       // Atomically update product stock and validate availability
@@ -148,17 +148,34 @@ export async function POST(request: NextRequest) {
        'razorpay': 'RAZORPAY',
        'dodo': 'DODO',
       };
+      const mappedPaymentMethod = paymentMethodMap[validatedData.paymentMethod];
+      if (!mappedPaymentMethod) {
+        return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
+      }
+      // Fetch user snapshot (email + name) to store on the order for audit
+      const userInfo = await tx.user.findUnique({
+        where: { id: payload.userId },
+        select: { email: true, firstName: true, lastName: true },
+      });
+
+      const snapshotEmail = userInfo?.email ?? 'unknown@example.com';
+      const snapshotName = [userInfo?.firstName, userInfo?.lastName]
+        .filter(Boolean)
+        .join(' ') || 'Unknown';
+
       // Create order
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
           userId: payload.userId,
+          userEmail: snapshotEmail,
+          userName: snapshotName,
           addressId: validatedData.addressId,
           subtotal,
           shippingCost,
           tax,
           total,
-          paymentMethod: paymentMethodMap[validatedData.paymentMethod] as 'STRIPE' | 'RAZORPAY' | 'DODO',
+          paymentMethod: mappedPaymentMethod,
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
@@ -193,7 +210,13 @@ export async function POST(request: NextRequest) {
     } catch (error: unknown) {
     if (typeof error === 'object' && error !== null && 'message' in error) {
       const message = (error as { message?: string }).message || '';
-      if (message.includes('Insufficient stock') || message.includes('Product') && message.includes('not found')) {
+      if (
+        message.includes('Insufficient stock') ||
+        (message.includes('Product') && message.includes('not found')) ||
+        message.includes('BadRequest') ||
+        message.includes('Address not found')
+      ) {
+        // Map known validation/data errors to 400
         return NextResponse.json({ error: message }, { status: 400 });
       }
     }

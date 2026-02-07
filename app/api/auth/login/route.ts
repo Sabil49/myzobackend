@@ -70,7 +70,10 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
     }
-    console.error('Login error:', error instanceof Error ? error.message : 'Unknown error');    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
-  }
+    console.error(
+      'Login error:',
+      error instanceof Error ? error.stack || error.message : 'Unknown error'
+    );
+    return NextResponse.json({ error: 'Login failed' }, { status: 500 });  }
 }
 

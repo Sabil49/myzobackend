@@ -97,6 +97,27 @@ UPDATE "cart_items" SET "userId" = (
   SELECT "userId" FROM "carts" WHERE "carts"."id" = "cart_items"."cartId"
 );
 
+-- Cleanup orphaned cart_items where cartId has no matching carts row
+-- Delete orphaned rows (best-effort) so the NOT NULL constraint can be applied safely
+DELETE FROM "cart_items" ci
+WHERE NOT EXISTS (
+  SELECT 1 FROM "carts" c WHERE c.id = ci."cartId"
+);
+
+-- Verify no orphaned cart_items remain. Fail migration if any are found after cleanup.
+DO $$
+DECLARE
+  orphan_count BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO orphan_count
+  FROM "cart_items" ci
+  LEFT JOIN "carts" c ON ci."cartId" = c.id
+  WHERE c.id IS NULL;
+  IF orphan_count > 0 THEN
+    RAISE EXCEPTION 'Migration aborted: % orphaned cart_items found (cartId missing). Please clean up or assign a valid cart before retrying.', orphan_count;
+  END IF;
+END $$;
+
 -- Set userId as NOT NULL after population
 ALTER TABLE "cart_items" ALTER COLUMN "userId" SET NOT NULL;
 
@@ -113,28 +134,43 @@ ALTER TABLE "fcm_tokens" ALTER COLUMN "platform" SET NOT NULL;
 -- AlterTable
 ALTER TABLE "order_items" ALTER COLUMN "price" SET DATA TYPE DECIMAL(10,2);
 
--- AlterTable
-ALTER TABLE "orders" DROP COLUMN "shipping",
-ADD COLUMN     "carrier" TEXT,
-ADD COLUMN     "paymentIntentId" TEXT,
-ADD COLUMN     "razorpayOrderId" TEXT,
-ADD COLUMN     "razorpayPaymentId" TEXT,
-ADD COLUMN     "shippingCost" DECIMAL(10,2) NOT NULL DEFAULT 0,
-ADD COLUMN     "trackingNumber" TEXT,
-ADD COLUMN     "userEmail" TEXT,
-ADD COLUMN     "userName" TEXT,
-ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(10,2),
-ALTER COLUMN "tax" SET DEFAULT 0,
-ALTER COLUMN "tax" SET DATA TYPE DECIMAL(10,2),
-ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2),
-ADD COLUMN     "paymentMethod_new" "PaymentMethod";
+-- Alter orders: drop shipping and add carrier
+ALTER TABLE "orders" DROP COLUMN "shipping";
+ALTER TABLE "orders" ADD COLUMN "carrier" TEXT;
+
+-- First, check for unexpected payment method values (top-level DO block)
+DO $$
+DECLARE
+  unexpected_count BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO unexpected_count FROM "orders"
+  WHERE "paymentMethod" NOT IN ('STRIPE', 'RAZORPAY', 'DODO');
+  IF unexpected_count > 0 THEN
+    RAISE WARNING 'Found % orders with unexpected paymentMethod values, defaulting to STRIPE', unexpected_count;
+  END IF;
+END $$;
+
+-- Add audit and new payment column before populating
+ALTER TABLE "orders" ADD COLUMN "userEmail" TEXT;
+ALTER TABLE "orders" ADD COLUMN "userName" TEXT;
+ALTER TABLE "orders" ALTER COLUMN "subtotal" SET DATA TYPE DECIMAL(10,2);
+ALTER TABLE "orders" ALTER COLUMN "tax" SET DEFAULT 0;
+ALTER TABLE "orders" ALTER COLUMN "tax" SET DATA TYPE DECIMAL(10,2);
+ALTER TABLE "orders" ALTER COLUMN "total" SET DATA TYPE DECIMAL(10,2);
+ALTER TABLE "orders" ADD COLUMN "paymentMethod_new" "PaymentMethod";
 
 -- Populate audit snapshot fields from users table to preserve order attribution
-UPDATE "orders" 
-SET "userEmail" = u."email", 
-    "userName" = CONCAT(u."firstName", ' ', u."lastName")
+UPDATE "orders" o
+SET "userEmail" = u."email"
 FROM "users" u
-WHERE "orders"."userId" = u."id";
+WHERE o."userId" = u.id
+  AND o."userEmail" IS NULL;
+
+UPDATE "orders" o
+SET "userName" = NULLIF(TRIM(CONCAT(COALESCE(u."firstName", ''), ' ', COALESCE(u."lastName", ''))), '')
+FROM "users" u
+WHERE o."userId" = u.id
+  AND (o."userName" IS NULL OR o."userName" = '');
 
 -- Populate paymentMethod_new by mapping existing values
 UPDATE "orders" SET "paymentMethod_new" = CASE
@@ -155,9 +191,6 @@ ALTER TABLE "orders" RENAME COLUMN "paymentMethod_new" TO "paymentMethod";
 ALTER TABLE "products" DROP COLUMN "compareAtPrice",
 DROP COLUMN "isAvailable",
 DROP COLUMN "slug",
-DROP COLUMN "stockQuantity",
-ADD COLUMN     "careInstructions" TEXT,
-ADD COLUMN     "dimensions" TEXT,
 ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
 ADD COLUMN     "materials" TEXT[],
 ADD COLUMN     "stock" INTEGER NOT NULL DEFAULT 0,
@@ -177,8 +210,31 @@ ALTER TABLE "products" ALTER COLUMN "dimensions" SET NOT NULL;
 ALTER TABLE "products" ALTER COLUMN "styleCode" SET NOT NULL;
 
 -- AlterTable
-ALTER TABLE "users" DROP COLUMN "role",
-ADD COLUMN     "role" "Role" NOT NULL DEFAULT 'CUSTOMER';
+-- Preserve existing role data
+ALTER TABLE "users" ADD COLUMN "role_backup" TEXT;
+UPDATE "users" SET "role_backup" = "role"::text;
+
+-- Warn about non-ADMIN/CUSTOMER roles being converted
+DO $$
+DECLARE
+  other_roles_count BIGINT;
+BEGIN
+  SELECT COUNT(*) INTO other_roles_count FROM "users" 
+  WHERE "role_backup" NOT IN ('ADMIN', 'CUSTOMER');
+  IF other_roles_count > 0 THEN
+    RAISE WARNING 'Found % users with roles other than ADMIN/CUSTOMER, defaulting to CUSTOMER', other_roles_count;
+  END IF;
+END $$;
+
+-- AlterTable: recreate role column with new enum type and safe default
+ALTER TABLE "users" DROP COLUMN "role";
+ALTER TABLE "users" ADD COLUMN "role" "Role" NOT NULL DEFAULT 'CUSTOMER';
+
+-- Restore admin roles
+UPDATE "users" SET "role" = 'ADMIN'::"Role" WHERE "role_backup" = 'ADMIN';
+
+-- Drop backup column
+ALTER TABLE "users" DROP COLUMN "role_backup";
 
 -- ====== DATA MIGRATION & ARCHIVAL ======
 
@@ -313,4 +369,4 @@ ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_userId_fkey" FOREIGN KEY ("u
 ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
