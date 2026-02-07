@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     }];
 
     // Call Dodo Checkout Sessions API
-    const apiUrl = `${DODO_API_BASE}/checkout-sessions`;
+    const apiUrl = `${DODO_API_BASE}/checkouts`;
     
     const payload = {
       billing,
