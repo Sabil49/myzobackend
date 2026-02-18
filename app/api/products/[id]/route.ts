@@ -153,11 +153,12 @@ export async function DELETE(
 
     const { id } = await params;
 
-    await prisma.product.delete({
+    await prisma.product.update({
       where: { id },
+      data: { isActive: false },
     });
 
-    return NextResponse.json({ message: 'Product deleted successfully' });
+    return NextResponse.json({ message: 'Product archived successfully' });
   } catch (error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2025') {
