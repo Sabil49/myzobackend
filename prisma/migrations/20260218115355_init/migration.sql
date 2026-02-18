@@ -2,6 +2,9 @@
 CREATE TYPE "Role" AS ENUM ('CUSTOMER', 'ADMIN');
 
 -- CreateEnum
+CREATE TYPE "PaymentMethod" AS ENUM ('STRIPE', 'RAZORPAY', 'DODO');
+
+-- CreateEnum
 CREATE TYPE "OrderStatus" AS ENUM ('PLACED', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED');
 
 -- CreateEnum
@@ -62,7 +65,7 @@ CREATE TABLE "products" (
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "price" DECIMAL(10,2) NOT NULL,
-    "categoryId" TEXT NOT NULL,
+    "categoryId" TEXT,
     "images" TEXT[],
     "materials" TEXT[],
     "dimensions" TEXT NOT NULL,
@@ -103,14 +106,16 @@ CREATE TABLE "orders" (
     "id" TEXT NOT NULL,
     "orderNumber" TEXT NOT NULL,
     "userId" TEXT,
-    "addressId" TEXT,
+    "userEmail" TEXT NOT NULL,
+    "userName" TEXT NOT NULL,
+    "addressId" TEXT NOT NULL,
     "subtotal" DECIMAL(10,2) NOT NULL,
     "shippingCost" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "tax" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "total" DECIMAL(10,2) NOT NULL,
     "status" "OrderStatus" NOT NULL DEFAULT 'PLACED',
     "paymentStatus" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
-    "paymentMethod" TEXT NOT NULL,
+    "paymentMethod" "PaymentMethod" NOT NULL,
     "paymentIntentId" TEXT,
     "razorpayOrderId" TEXT,
     "razorpayPaymentId" TEXT,
@@ -157,8 +162,21 @@ CREATE TABLE "fcm_tokens" (
     CONSTRAINT "fcm_tokens_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "refresh_token_revocations" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "revokedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "refresh_token_revocations_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE INDEX "addresses_userId_idx" ON "addresses"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "categories_name_key" ON "categories"("name");
@@ -209,7 +227,13 @@ CREATE UNIQUE INDEX "fcm_tokens_token_key" ON "fcm_tokens"("token");
 CREATE INDEX "fcm_tokens_userId_idx" ON "fcm_tokens"("userId");
 
 -- CreateIndex
-CREATE INDEX "addresses_userId_idx" ON "addresses"("userId");
+CREATE UNIQUE INDEX "refresh_token_revocations_tokenHash_key" ON "refresh_token_revocations"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "refresh_token_revocations_userId_idx" ON "refresh_token_revocations"("userId");
+
+-- CreateIndex
+CREATE INDEX "refresh_token_revocations_revokedAt_idx" ON "refresh_token_revocations"("revokedAt");
 
 -- AddForeignKey
 ALTER TABLE "addresses" ADD CONSTRAINT "addresses_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -233,16 +257,19 @@ ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_productId_fkey" FOREIGN KEY 
 ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "orders" ADD CONSTRAINT "orders_addressId_fkey" FOREIGN KEY ("addressId") REFERENCES "addresses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "orders" ADD CONSTRAINT "orders_addressId_fkey" FOREIGN KEY ("addressId") REFERENCES "addresses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "order_items" ADD CONSTRAINT "order_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "order_status_history" ADD CONSTRAINT "order_status_history_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "fcm_tokens" ADD CONSTRAINT "fcm_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "refresh_token_revocations" ADD CONSTRAINT "refresh_token_revocations_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
