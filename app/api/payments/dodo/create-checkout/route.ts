@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
     //
     const customerEmail = order.userEmail ?? order.user?.email ?? '';
     const customerName =
-      order.userName ??
-      `${order.user?.firstName ?? ''} ${order.user?.lastName ?? ''}`.trim() ||
+      (order.userName ??
+      `${order.user?.firstName ?? ''} ${order.user?.lastName ?? ''}`.trim()) ||
       'Customer';
 
     const returnUrl = `${BASE_URL}/api/payments/dodo/return?orderId=${order.id}`;
