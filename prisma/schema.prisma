@@ -91,7 +91,7 @@ model Product {
   dimensions    String    // e.g., "30cm x 25cm x 15cm"
   careInstructions String @db.Text
   
-  stock         Int       @default(0)
+  stock         Int       @default(999)
   isActive      Boolean   @default(true)
   isFeatured    Boolean   @default(false)
   
