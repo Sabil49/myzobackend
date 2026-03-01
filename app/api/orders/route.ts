@@ -15,27 +15,19 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
-
     let payload;
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
-      console.error('Token verification failed:', error);
+    } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
     const orders = await prisma.order.findMany({
       where: { userId: payload.userId },
       include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
+        items: { include: { product: true } },
         shippingAddress: true,
-        statusHistory: {
-          orderBy: { createdAt: 'desc' },
-        },
+        statusHistory: { orderBy: { createdAt: 'desc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -43,14 +35,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ orders });
   } catch (error) {
     console.error('Orders fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch orders' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
   }
 }
 
 // POST /api/orders - Create order
+//
+// STOCK STRATEGY:
+//   ✅ On order creation (PLACED)    → validate stock exists, but do NOT decrement
+//   ✅ On payment confirmed (PAID)   → decrement stock atomically (see return/route.ts)
+//   ✅ On cancellation/failure       → no stock change needed (was never decremented)
+//
+// This prevents stock exhaustion from abandoned/failed payment attempts.
+//
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -59,20 +56,17 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.slice('Bearer '.length);
-
     let payload;
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
-      console.error('Token verification failed:', error);
+    } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let body;
     try {
       body = await request.json();
-    } catch (error) {
-      console.error('JSON parse error:', error);
+    } catch {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
@@ -86,42 +80,50 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // Calculate totals with transaction for atomicity
+    const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY' | 'DODO'> = {
+      stripe: 'STRIPE',
+      razorpay: 'RAZORPAY',
+      dodo: 'DODO',
+    };
+    const mappedPaymentMethod = paymentMethodMap[validatedData.paymentMethod];
+    if (!mappedPaymentMethod) {
+      return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
+    }
+
     const order = await prisma.$transaction(async (tx) => {
-      // Verify address ownership within transaction
+      // 1. Verify address belongs to user
       const address = await tx.address.findUnique({
         where: { id: validatedData.addressId },
         select: { userId: true },
       });
-
       if (!address || address.userId !== payload.userId) {
         throw new Error('BadRequest: Address not found or access denied');
       }
 
-      // Atomically update product stock and validate availability
-      const itemsWithPrices: Array<{ productId: string; quantity: number; price: number }> = [];
+      // 2. Validate stock availability — READ ONLY, no decrement
+      const itemsWithPrices: Array<{
+        productId: string;
+        quantity: number;
+        price: number;
+      }> = [];
 
       for (const item of validatedData.items) {
-        // Atomically check and decrement stock in a single operation
         const product = await tx.product.findUnique({
           where: { id: item.productId },
+          select: { id: true, price: true, stock: true, isActive: true, name: true },
         });
 
         if (!product) {
           throw new Error(`Product ${item.productId} not found`);
         }
-
-        // Use updateMany with stock condition for atomic check-and-decrement
-        const updateResult = await tx.product.updateMany({
-          where: { 
-            id: item.productId,
-            stock: { gte: item.quantity }
-          },
-          data: { stock: { decrement: item.quantity } },
-        });
-
-        if (updateResult.count === 0) {
-          throw new Error(`Insufficient stock for product ${item.productId}`);
+        if (!product.isActive) {
+          throw new Error(`Product "${product.name}" is no longer available`);
+        }
+        // ✅ Only CHECK stock — do not decrement here
+        if (product.stock < item.quantity) {
+          throw new Error(
+            `"${product.name}" only has ${product.stock} item${product.stock === 1 ? '' : 's'} in stock (requested ${item.quantity})`
+          );
         }
 
         itemsWithPrices.push({
@@ -131,39 +133,28 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // 3. Calculate totals
       const subtotal = itemsWithPrices.reduce(
-        (sum, item) => sum + Number(item.price) * item.quantity,
-        0
+        (sum, item) => sum + item.price * item.quantity,
+        0,
       );
-      
-      const shippingCost = subtotal > 500 ? 0 : 25; // Free shipping over $500
-      const tax = subtotal * 0.08; // 8% tax
+      const shippingCost = subtotal > 500 ? 0 : 25;
+      const tax = subtotal * 0.08;
       const total = subtotal + shippingCost + tax;
 
-      // Generate order number with crypto-strong UUID
-      const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
-
-      const paymentMethodMap: Record<string, 'STRIPE' | 'RAZORPAY' | 'DODO'> = {
-       'stripe': 'STRIPE',
-       'razorpay': 'RAZORPAY',
-       'dodo': 'DODO',
-      };
-      const mappedPaymentMethod = paymentMethodMap[validatedData.paymentMethod];
-      if (!mappedPaymentMethod) {
-        return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
-      }
-      // Fetch user snapshot (email + name) to store on the order for audit
+      // 4. User snapshot
       const userInfo = await tx.user.findUnique({
         where: { id: payload.userId },
         select: { email: true, firstName: true, lastName: true },
       });
-
       const snapshotEmail = userInfo?.email ?? 'unknown@example.com';
-      const snapshotName = [userInfo?.firstName, userInfo?.lastName]
-        .filter(Boolean)
-        .join(' ') || 'Unknown';
+      const snapshotName =
+        [userInfo?.firstName, userInfo?.lastName].filter(Boolean).join(' ') ||
+        'Unknown';
 
-      // Create order
+      // 5. Create order — status PLACED, paymentStatus PENDING, stock untouched
+      const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
@@ -179,53 +170,42 @@ export async function POST(request: NextRequest) {
           status: 'PLACED',
           paymentStatus: 'PENDING',
           items: {
-            createMany: {
-              data: itemsWithPrices,
-            },
+            createMany: { data: itemsWithPrices },
           },
           statusHistory: {
-            create: {
-              status: 'PLACED',
-              notes: 'Order placed successfully',
-            },
+            create: { status: 'PLACED', notes: 'Order placed, awaiting payment' },
           },
         },
         include: {
-          items: {
-            include: { product: true },
-          },
+          items: { include: { product: true } },
           shippingAddress: true,
         },
       });
 
-      // Clear user's cart within transaction
-      await tx.cartItem.deleteMany({
-        where: { userId: payload.userId },
-      });
-  
+      // 6. Clear cart
+      await tx.cartItem.deleteMany({ where: { userId: payload.userId } });
+
       return createdOrder;
     });
-  
-      return NextResponse.json({ order }, { status: 201 });
-    } catch (error: unknown) {
-    if (typeof error === 'object' && error !== null && 'message' in error) {
-      const message = (error as { message?: string }).message || '';
-      if (
-        message.includes('Insufficient stock') ||
-        (message.includes('Product') && message.includes('not found')) ||
-        message.includes('BadRequest') ||
-        message.includes('Address not found')
-      ) {
-        // Map known validation/data errors to 400
-        return NextResponse.json({ error: message }, { status: 400 });
-      }
+
+    return NextResponse.json({ order }, { status: 201 });
+  } catch (error: unknown) {
+    const message =
+      typeof error === 'object' && error !== null && 'message' in error
+        ? (error as { message: string }).message
+        : '';
+
+    if (
+      message.includes('Insufficient stock') ||
+      message.includes('only has') ||
+      message.includes('not found') ||
+      message.includes('no longer available') ||
+      message.includes('BadRequest')
+    ) {
+      return NextResponse.json({ error: message }, { status: 400 });
     }
+
     console.error('Order creation error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create order' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
   }
 }
-
-
