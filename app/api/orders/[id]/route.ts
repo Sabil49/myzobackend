@@ -1,33 +1,35 @@
 // app/api/orders/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyAccessToken } from '@/lib/auth';
+// GET /api/orders/:id  — fetch a single order with full detail
 
-// GET /api/orders/[id]
+import { verifyAccessToken } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = await params;
-    
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const token = authHeader.slice('Bearer '.length);
-
-    let payload;
+    const token = authHeader.slice("Bearer ".length);
+    let payload: { userId: string };
     try {
       payload = verifyAccessToken(token);
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const orderId = params.id;
+    if (!orderId) {
+      return NextResponse.json({ error: "Order ID required" }, { status: 400 });
     }
 
     const order = await prisma.order.findUnique({
-      where: { id },
+      where: { id: orderId },
       include: {
         items: {
           include: {
@@ -35,35 +37,35 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
-                images: true,
                 styleCode: true,
+                images: true,
+                price: true,
               },
             },
           },
         },
         shippingAddress: true,
         statusHistory: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "asc" },
         },
       },
     });
 
     if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // Check if user owns this order (or is admin)
-    if (order.userId !== payload.userId && payload.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Security: only allow the order owner to view it
+    if (order.userId !== payload.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return NextResponse.json({ order });
   } catch (error) {
-    console.error('Order fetch error:', error);
+    console.error("Order fetch error:", error);
     return NextResponse.json(
-      { error: 'Failed to fetch order' },
-      { status: 500 }
+      { error: "Failed to fetch order" },
+      { status: 500 },
     );
   }
 }
-
