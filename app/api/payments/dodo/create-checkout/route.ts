@@ -78,8 +78,10 @@ export async function POST(request: NextRequest) {
         {
           product_id: DODO_PRODUCT_ID,
           quantity: 1,
-          // ✅ Dynamic price override — this is the cart total in cents
-          unit_amount: amountCents,
+          // ✅ Dynamic price override via "Pay What You Want" — amount in cents (e.g. $62.80 = 6280)
+          // Requires "Pay What You Want" to be ENABLED on this product in the Dodo dashboard.
+          // Dashboard → Products → your product → Edit → enable Pay What You Want
+          amount: amountCents,
         },
       ],
       customer: {
