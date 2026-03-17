@@ -41,7 +41,7 @@ export default function SubscribeButton({ planId }: { planId?: string }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DODO_PAYMENTS_API_KEY}`
+        'Authorization': `Bearer ${process.env.DODO_LIVE_SECRET}`
       },
       body: JSON.stringify({
         product_cart: [

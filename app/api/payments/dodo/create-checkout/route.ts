@@ -45,21 +45,23 @@ export async function POST(request: NextRequest) {
 
     // ── 3. Config ─────────────────────────────────────────────────────────────
     const DODO_ENVIRONMENT = (process.env.DODO_ENVIRONMENT || 'test').toLowerCase();
-    const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI';
+    const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXgG1Abo7Esjd8sBznXB';
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
 
     const DODO_LIVE_SECRET = process.env.DODO_LIVE_SECRET;
     const DODO_TEST_SECRET = process.env.DODO_TEST_SECRET;
 
     const DODO_API_KEY =
-      DODO_ENVIRONMENT === 'live' ? DODO_LIVE_SECRET || process.env.DODO_API_KEY : DODO_TEST_SECRET || process.env.DODO_API_KEY;
-
-    if (!DODO_API_KEY) {
-      return NextResponse.json({ error: `DODO API key not configured for environment: ${DODO_ENVIRONMENT}` }, { status: 500 });
-    }
+      DODO_ENVIRONMENT === 'live' ? DODO_LIVE_SECRET : DODO_TEST_SECRET;
 
     if (DODO_ENVIRONMENT === 'live' && !DODO_LIVE_SECRET) {
       return NextResponse.json({ error: 'DODO_LIVE_SECRET must be configured for live environment' }, { status: 500 });
+    }
+    if (DODO_ENVIRONMENT === 'test' && !DODO_TEST_SECRET) {
+      return NextResponse.json({ error: 'DODO_TEST_SECRET must be configured for test environment' }, { status: 500 });
+    }
+    if (!DODO_API_KEY) {
+      return NextResponse.json({ error: `DODO API key not configured for environment: ${DODO_ENVIRONMENT}` }, { status: 500 });
     }
 
     if (DODO_ENVIRONMENT !== 'live' && DODO_ENVIRONMENT !== 'test') {

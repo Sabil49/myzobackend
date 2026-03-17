@@ -72,18 +72,22 @@ export async function POST(request: NextRequest) {
     const DODO_ENVIRONMENT = (process.env.DODO_ENVIRONMENT || 'test').toLowerCase();
     const DODO_LIVE_SECRET = process.env.DODO_LIVE_SECRET;
     const DODO_TEST_SECRET = process.env.DODO_TEST_SECRET;
-    const DODO_API_KEY =
-      DODO_ENVIRONMENT === 'live'
-        ? DODO_LIVE_SECRET || process.env.DODO_API_KEY
-        : DODO_TEST_SECRET || process.env.DODO_API_KEY;
+    const DODO_API_KEY = DODO_ENVIRONMENT === 'live' ? DODO_LIVE_SECRET : DODO_TEST_SECRET;
     const DODO_API_BASE =
       DODO_ENVIRONMENT === 'live'
         ? 'https://live.dodopayments.com'
-        : process.env.DODO_API_BASE || 'https://api.test.dodopayments.com';
+        : 'https://api.test.dodopayments.com';
     const DODO_CHECKOUT_BASE =
       DODO_ENVIRONMENT === 'live'
         ? 'https://live.dodopayments.com'
-        : process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
+        : 'https://test.checkout.dodopayments.com';
+
+    if (DODO_ENVIRONMENT === 'live' && !DODO_LIVE_SECRET) {
+      return NextResponse.json({ error: 'DODO_LIVE_SECRET must be configured for live environment' }, { status: 500 });
+    }
+    if (DODO_ENVIRONMENT === 'test' && !DODO_TEST_SECRET) {
+      return NextResponse.json({ error: 'DODO_TEST_SECRET must be configured for test environment' }, { status: 500 });
+    }
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
 
     if (DODO_ENVIRONMENT === 'live' && !DODO_LIVE_SECRET) {
@@ -95,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     const returnUrl = `${BASE_URL}/api/payments/dodo/return?orderId=${order.id}`;
 
-    let checkoutUrl = `${DODO_CHECKOUT_BASE}/buy/${process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI'}?quantity=1&redirect_url=${encodeURIComponent(returnUrl)}`;
+    let checkoutUrl = `${DODO_CHECKOUT_BASE}/buy/${process.env.DODO_PRODUCT_ID || 'pdt_0NXgG1Abo7Esjd8sBznXB'}?quantity=1&redirect_url=${encodeURIComponent(returnUrl)}`;
 
     // If API key provided, create real checkout via Dodo API
     if (DODO_API_KEY) {
