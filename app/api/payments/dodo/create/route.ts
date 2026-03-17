@@ -69,13 +69,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid order amount' }, { status: 400 });
     }
 
-    const DODO_API_BASE = process.env.DODO_API_BASE || 'https://api.test.dodopayments.com';
-    const DODO_CHECKOUT_BASE = process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
-    const DODO_API_KEY = process.env.DODO_API_KEY;
+    const DODO_ENVIRONMENT = (process.env.DODO_ENVIRONMENT || 'test').toLowerCase();
+    const DODO_LIVE_SECRET = process.env.DODO_LIVE_SECRET;
+    const DODO_TEST_SECRET = process.env.DODO_TEST_SECRET;
+    const DODO_API_KEY =
+      DODO_ENVIRONMENT === 'live'
+        ? DODO_LIVE_SECRET || process.env.DODO_API_KEY
+        : DODO_TEST_SECRET || process.env.DODO_API_KEY;
+    const DODO_API_BASE =
+      DODO_ENVIRONMENT === 'live'
+        ? 'https://live.dodopayments.com'
+        : process.env.DODO_API_BASE || 'https://api.test.dodopayments.com';
+    const DODO_CHECKOUT_BASE =
+      DODO_ENVIRONMENT === 'live'
+        ? 'https://live.dodopayments.com'
+        : process.env.DODO_CHECKOUT_URL || 'https://test.checkout.dodopayments.com';
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
 
+    if (DODO_ENVIRONMENT === 'live' && !DODO_LIVE_SECRET) {
+      return NextResponse.json({ error: 'DODO_LIVE_SECRET must be configured for live environment' }, { status: 500 });
+    }
     if (!DODO_API_KEY) {
-      console.warn('DODO_API_KEY not set; falling back to simple checkout URL');
+      console.warn('DODO_API_KEY not set; will use simple checkout URL fallback');
     }
 
     const returnUrl = `${BASE_URL}/api/payments/dodo/return?orderId=${order.id}`;
@@ -100,7 +115,8 @@ export async function POST(request: NextRequest) {
         webhook_url: `${BASE_URL}/api/payments/dodo/webhook`,
       };
 
-      console.log('[DODO] Calling API:', apiUrl);
+      const mask = DODO_API_KEY ? `${DODO_API_KEY.slice(0, 4)}...${DODO_API_KEY.slice(-4)}` : 'none';
+      console.log('[DODO] Calling API:', apiUrl, { environment: DODO_ENVIRONMENT, checkoutBase: DODO_CHECKOUT_BASE, keyHint: mask });
       console.log('[DODO] Request payload:', JSON.stringify(payload, null, 2));
 
       let dodoResponse;

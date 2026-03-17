@@ -44,20 +44,30 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 3. Config ─────────────────────────────────────────────────────────────
-    const DODO_API_KEY = process.env.DODO_API_KEY;
-    if (!DODO_API_KEY) {
-      return NextResponse.json({ error: 'DODO_API_KEY not configured' }, { status: 500 });
-    }
-
+    const DODO_ENVIRONMENT = (process.env.DODO_ENVIRONMENT || 'test').toLowerCase();
     const DODO_PRODUCT_ID = process.env.DODO_PRODUCT_ID || 'pdt_0NXlidWhtXLoHiO2PwrTI';
-    const DODO_ENVIRONMENT = process.env.DODO_ENVIRONMENT || 'test';
     const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://myzobackend.vercel.app';
 
+    const DODO_LIVE_SECRET = process.env.DODO_LIVE_SECRET;
+    const DODO_TEST_SECRET = process.env.DODO_TEST_SECRET;
+
+    const DODO_API_KEY =
+      DODO_ENVIRONMENT === 'live' ? DODO_LIVE_SECRET || process.env.DODO_API_KEY : DODO_TEST_SECRET || process.env.DODO_API_KEY;
+
+    if (!DODO_API_KEY) {
+      return NextResponse.json({ error: `DODO API key not configured for environment: ${DODO_ENVIRONMENT}` }, { status: 500 });
+    }
+
+    if (DODO_ENVIRONMENT === 'live' && !DODO_LIVE_SECRET) {
+      return NextResponse.json({ error: 'DODO_LIVE_SECRET must be configured for live environment' }, { status: 500 });
+    }
+
+    if (DODO_ENVIRONMENT !== 'live' && DODO_ENVIRONMENT !== 'test') {
+      return NextResponse.json({ error: `Unsupported DODO_ENVIRONMENT: ${DODO_ENVIRONMENT}. Use 'live' or 'test'.` }, { status: 500 });
+    }
+
     // Dodo uses different base URLs per environment
-    const DODO_API_BASE =
-      DODO_ENVIRONMENT === 'live'
-        ? 'https://live.dodopayments.com'
-        : 'https://test.dodopayments.com';
+    const DODO_API_BASE = DODO_ENVIRONMENT === 'live' ? 'https://live.dodopayments.com' : 'https://test.dodopayments.com';
 
     // ── 4. Build checkout session payload ─────────────────────────────────────
     //
@@ -103,9 +113,8 @@ export async function POST(request: NextRequest) {
     // Endpoint: POST /checkouts  (Checkout Sessions API)
     const apiUrl = `${DODO_API_BASE}/checkouts`;
 
-    console.log('[DODO] Creating checkout session:', apiUrl);
-    console.log('[DODO] Environment:', DODO_ENVIRONMENT);
-    console.log('[DODO] Amount (cents):', amountCents);
+    const maskedKey = `${DODO_API_KEY?.slice(0, 4)}...${DODO_API_KEY?.slice(-4)}`;
+    console.log('[DODO] Creating checkout session', { apiUrl, environment: DODO_ENVIRONMENT, productId: DODO_PRODUCT_ID, keyHint: maskedKey, amountCents });
 
     let dodoResponse: Response;
     try {
