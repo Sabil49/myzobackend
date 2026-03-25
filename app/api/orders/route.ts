@@ -90,103 +90,98 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 });
     }
 
-    const order = await prisma.$transaction(async (tx) => {
-      // 1. Verify address belongs to user
-      const address = await tx.address.findUnique({
-        where: { id: validatedData.addressId },
-        select: { userId: true },
-      });
-      if (!address || address.userId !== payload.userId) {
-        throw new Error('BadRequest: Address not found or access denied');
-      }
-
-      // 2. Validate stock availability — READ ONLY, no decrement
-      const itemsWithPrices: Array<{
-        productId: string;
-        quantity: number;
-        price: number;
-      }> = [];
-
-      for (const item of validatedData.items) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { id: true, price: true, stock: true, isActive: true, name: true },
-        });
-
-        if (!product) {
-          throw new Error(`Product ${item.productId} not found`);
-        }
-        if (!product.isActive) {
-          throw new Error(`Product "${product.name}" is no longer available`);
-        }
-        // ✅ Only CHECK stock — do not decrement here
-        if (product.stock < item.quantity) {
-          throw new Error(
-            `"${product.name}" only has ${product.stock} item${product.stock === 1 ? '' : 's'} in stock (requested ${item.quantity})`
-          );
-        }
-
-        itemsWithPrices.push({
-          productId: item.productId,
-          quantity: item.quantity,
-          price: Number(product.price),
-        });
-      }
-
-      // 3. Calculate totals
-      const subtotal = itemsWithPrices.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0,
-      );
-      const shippingCost = subtotal > 500 ? 0 : 25;
-      const tax = subtotal * 0.08;
-      const total = subtotal + shippingCost + tax;
-
-      // 4. User snapshot
-      const userInfo = await tx.user.findUnique({
-        where: { id: payload.userId },
-        select: { email: true, firstName: true, lastName: true },
-      });
-      const snapshotEmail = userInfo?.email ?? 'unknown@example.com';
-      const snapshotName =
-        [userInfo?.firstName, userInfo?.lastName].filter(Boolean).join(' ') ||
-        'Unknown';
-
-      // 5. Create order — status PLACED, paymentStatus PENDING, stock untouched
-      const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
-
-      const createdOrder = await tx.order.create({
-        data: {
-          orderNumber,
-          userId: payload.userId,
-          userEmail: snapshotEmail,
-          userName: snapshotName,
-          addressId: validatedData.addressId,
-          subtotal,
-          shippingCost,
-          tax,
-          total,
-          paymentMethod: mappedPaymentMethod,
-          status: 'PLACED',
-          paymentStatus: 'PENDING',
-          items: {
-            createMany: { data: itemsWithPrices },
-          },
-          statusHistory: {
-            create: { status: 'PLACED', notes: 'Order placed, awaiting payment' },
-          },
-        },
-        include: {
-          items: { include: { product: true } },
-          shippingAddress: true,
-        },
-      });
-
-      // 6. Clear cart
-      await tx.cartItem.deleteMany({ where: { userId: payload.userId } });
-
-      return createdOrder;
+    // 1. Verify address belongs to user (non-transactional read)
+    const address = await prisma.address.findUnique({
+      where: { id: validatedData.addressId },
+      select: { userId: true },
     });
+    if (!address || address.userId !== payload.userId) {
+      return NextResponse.json({ error: 'Address not found or access denied' }, { status: 400 });
+    }
+
+    // 2. Validate stock availability — READ ONLY, no decrement (non-transactional read)
+    const itemsWithPrices: Array<{ productId: string; quantity: number; price: number }> = [];
+
+    for (const item of validatedData.items) {
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { price: true, stock: true, isActive: true, name: true },
+      });
+
+      if (!product) {
+        return NextResponse.json({ error: `Product ${item.productId} not found` }, { status: 400 });
+      }
+      if (!product.isActive) {
+        return NextResponse.json({ error: `Product "${product.name}" is no longer available` }, { status: 400 });
+      }
+      if (product.stock < item.quantity) {
+        return NextResponse.json(
+          {
+            error: `"${product.name}" only has ${product.stock} item${product.stock === 1 ? '' : 's'} in stock (requested ${item.quantity})`,
+          },
+          { status: 400 },
+        );
+      }
+
+      itemsWithPrices.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: Number(product.price),
+      });
+    }
+
+    // 3. Calculate totals
+    const subtotal = itemsWithPrices.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const shippingCost = subtotal > 500 ? 0 : 25;
+    const tax = subtotal * 0.08;
+    const total = subtotal + shippingCost + tax;
+
+    // 4. User snapshot (non-transactional read)
+    const userInfo = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { email: true, firstName: true, lastName: true },
+    });
+    const snapshotEmail = userInfo?.email ?? 'unknown@example.com';
+    const snapshotName = [userInfo?.firstName, userInfo?.lastName].filter(Boolean).join(' ') || 'Unknown';
+
+    // 5. Create order and clear cart in one short-living transaction
+    const order = await prisma.$transaction(
+      async (tx) => {
+        const orderNumber = `LH${Date.now()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+
+        const createdOrder = await tx.order.create({
+          data: {
+            orderNumber,
+            userId: payload.userId,
+            userEmail: snapshotEmail,
+            userName: snapshotName,
+            addressId: validatedData.addressId,
+            subtotal,
+            shippingCost,
+            tax,
+            total,
+            paymentMethod: mappedPaymentMethod,
+            status: 'PLACED',
+            paymentStatus: 'PENDING',
+            items: {
+              createMany: { data: itemsWithPrices },
+            },
+            statusHistory: {
+              create: { status: 'PLACED', notes: 'Order placed, awaiting payment' },
+            },
+          },
+          include: {
+            items: { include: { product: true } },
+            shippingAddress: true,
+          },
+        });
+
+        await tx.cartItem.deleteMany({ where: { userId: payload.userId } });
+
+        return createdOrder;
+      },
+      { timeout: 15000 },
+    );
 
     return NextResponse.json({ order }, { status: 201 });
   } catch (error: unknown) {
