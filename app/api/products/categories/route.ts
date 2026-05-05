@@ -18,13 +18,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-      return NextResponse.json({ error: error.errors }, { status: 400 });
-    }
-    console.error('Wishlist toggle error:', error);
-    return NextResponse.json(
-      { error: 'Failed to toggle wishlist' },
-      { status: 500 }
-    );
-  }
-}
-
+     
