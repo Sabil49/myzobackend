@@ -18,6 +18,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow public browsing of products without authentication
+  if (
+    request.method === 'GET' &&
+    (path === '/api/products' ||
+      path === '/api/products/categories' ||
+      path.startsWith('/api/products/'))
+  ) {
+    return NextResponse.next();
+  }
+
   // Only check token existence
   const authHeader = request.headers.get('authorization');
   const token = authHeader?.startsWith('Bearer ')
